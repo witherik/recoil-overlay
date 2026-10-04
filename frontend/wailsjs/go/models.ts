@@ -4,7 +4,9 @@ export namespace main {
 	    gap: number;
 	    arrowSize: number;
 	    opacity: number;
+	    arrows: boolean;
 	    timeline: boolean;
+	    timelineIdle: boolean;
 	    offsetX: number;
 	    offsetY: number;
 	    timelineOffset: number;
@@ -25,7 +27,9 @@ export namespace main {
 	        this.gap = source["gap"];
 	        this.arrowSize = source["arrowSize"];
 	        this.opacity = source["opacity"];
+	        this.arrows = source["arrows"];
 	        this.timeline = source["timeline"];
+	        this.timelineIdle = source["timelineIdle"];
 	        this.offsetX = source["offsetX"];
 	        this.offsetY = source["offsetY"];
 	        this.timelineOffset = source["timelineOffset"];

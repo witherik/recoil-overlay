@@ -22,12 +22,13 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
 
 - **F8** switches between edit mode and practice mode. Practice mode makes the overlay click-through; press F8 again to edit.
 - **Move overlay** shows the overlay with a backdrop so you can drag it into place; **Done moving** hides it again. The position is saved as an offset from the middle of the Apex window (or of the current monitor when Apex is not running), so it follows resolution changes. The first run starts centered, and **Center** resets it. Use this to correct the placement on mixed-DPI setups.
+- **Hide timeline while shooting** keeps the timeline visible between sprays but removes it from the overlay while left-click is held.
 - **F9** disables or enables practice input. Re-enabling requires a fresh click (release, then press).
 - The game must have the foreground title **Apex Legends** for a held click to start a run.
 - **Preview pattern** runs from edit mode without Apex Legends. Use it to inspect the arrows and timeline.
 - Optional voice cues are embedded in the app, so playback works offline. The clips are short so they fit before a direction change: `left` is about 77 ms and `right` about 95 ms, synthesized with Microsoft David Desktop at its fastest rate, trimmed to start within 1 ms and normalised in volume. Voice lead defaults to 150 ms and can be adjusted from 0 to 350 ms.
 
-Arrow spacing, arrow size, opacity, timeline visibility and placement, voice, and voice lead are editable in the Wails settings window. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control.
+Arrow spacing, arrow size, opacity, arrow and timeline visibility, timeline placement, voice, and voice lead are editable in the Wails settings window. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control.
 
 ## Build requirements
 

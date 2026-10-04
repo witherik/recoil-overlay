@@ -16,10 +16,24 @@ func TestPracticeCanvasKeepsCrosshairTransparent(t *testing.T) {
 		if img.RGBAAt(int(310*dpi), int(235*dpi)).A == 0 {
 			t.Fatal("timeline should be drawn")
 		}
-		s.Settings.Timeline = false
+		if img.RGBAAt(int(381*dpi), int(142*dpi)).A == 0 {
+			t.Fatal("arrow should be drawn")
+		}
+		s.Settings.TimelineIdle, s.Held = true, true
+		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(235*dpi)).A != 0 {
+			t.Fatal("timeline should hide while shooting")
+		}
+		s.Held = false
+		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(235*dpi)).A == 0 {
+			t.Fatal("timeline should return on release")
+		}
+		s.Settings.Timeline, s.Settings.Arrows = false, false
 		hidden := drawPractice(s, int(620*dpi), int(600*dpi), dpi)
 		if hidden.RGBAAt(int(310*dpi), int(235*dpi)).A != 0 {
 			t.Fatal("hidden timeline leaves pixels")
+		}
+		if hidden.RGBAAt(int(381*dpi), int(142*dpi)).A != 0 {
+			t.Fatal("hidden arrows leave pixels")
 		}
 		if os.Getenv("RECOIL_RENDER_TEST") == "1" && dpi == 1 {
 			if err := os.MkdirAll("test-results", 0755); err != nil {

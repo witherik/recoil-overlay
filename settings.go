@@ -10,7 +10,9 @@ type Settings struct {
 	Gap            int  `json:"gap"`
 	ArrowSize      int  `json:"arrowSize"`
 	Opacity        int  `json:"opacity"`
+	Arrows         bool `json:"arrows"`
 	Timeline       bool `json:"timeline"`
+	TimelineIdle   bool `json:"timelineIdle"` // hide the timeline while left-click is held
 	OffsetX        int  `json:"offsetX"`
 	OffsetY        int  `json:"offsetY"`
 	TimelineOffset int  `json:"timelineOffset"`
@@ -24,7 +26,7 @@ type Settings struct {
 }
 
 func defaultSettings() Settings {
-	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Timeline: true, TimelineOffset: 32, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
+	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
 }
 func clamp(v, low, high int) int {
 	if v < low {

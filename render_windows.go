@@ -41,6 +41,7 @@ type frameKey struct {
 	Elapsed           int64
 	Direction, Status string
 	Armed, Moving     bool
+	Held, Editing     bool
 }
 type point struct{ X, Y int32 }
 type bitmapHeader struct {
@@ -96,7 +97,7 @@ func renderPractice(s Snapshot) error {
 	if dpi == 0 {
 		dpi = 96
 	}
-	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving}
+	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving, s.Held, s.Editing}
 	if practiceFrameValid && key == lastPracticeFrame {
 		return nil
 	}
@@ -215,6 +216,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		c.line(center, arrowAnchorY-9, center, arrowAnchorY+9, 1.5, text)
 	}
 	for _, direction := range []string{"left", "right"} {
+		if !s.Settings.Arrows {
+			break
+		}
 		x := center - (gap+size)/2
 		if direction == "right" {
 			x = center + (gap+size)/2
@@ -252,7 +256,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
 	}
 	c.centeredText(center, 61, 9, practiceStatus(s), color.NRGBA{183, 196, 200, 210})
-	if s.Settings.Timeline {
+	// Optionally clear the view while shooting; the timeline returns on release.
+	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
+	if s.Settings.Timeline && !firing {
 		w := math.Min(420, float64(width)/scale-44)
 		x := center - w/2
 		y := arrowAnchorY + size/2 + float64(s.Settings.TimelineOffset)

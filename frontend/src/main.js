@@ -16,7 +16,7 @@ document.querySelector("#app").innerHTML = `
     <label>Opacity <output id="opacity-value"></output><input id="opacity" type="range" min="20" max="100"></label>
     <label>Timeline spacing <output id="timelineOffset-value"></output><input id="timelineOffset" type="range" min="12" max="100" step="2"></label>
    </div>
-   <div class="options-row"><label class="check"><input id="timeline-toggle" type="checkbox">Show timeline</label><label class="check"><input id="voice-toggle" type="checkbox">Voice cues</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
+   <div class="options-row"><label class="check"><input id="arrows-toggle" type="checkbox">Arrows</label><label class="check"><input id="timeline-toggle" type="checkbox">Timeline</label><label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide timeline while shooting</label></div><div class="options-row second"><label class="check"><input id="voice-toggle" type="checkbox">Voice</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
    <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd>F8</kbd></button></div>
    <p class="helper">Hold left-click in Apex to begin. Release to reset.<br><kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable · then click again</p>
    <p id="error" role="alert" hidden></p>
@@ -64,7 +64,7 @@ function render(s) {
   );
   document.documentElement.style.setProperty(
     "--content-height",
-    `${controlsTop + 270}px`,
+    `${controlsTop + 300}px`,
   );
   for (const id of ["gap", "arrowSize", "opacity", "timelineOffset"]) {
     if (document.activeElement !== $(id)) $(id).value = config[id];
@@ -73,9 +73,15 @@ function render(s) {
   }
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
+  $("arrows-toggle").checked = config.arrows;
+  $("left").parentElement.style.visibility = config.arrows
+    ? "visible"
+    : "hidden";
   $("timeline-toggle").checked = config.timeline;
   $("voice-toggle").checked = config.voice;
   $("voiceLeadMs").disabled = !config.voice;
+  $("timelineIdle-toggle").checked = config.timelineIdle;
+  $("timelineIdle-toggle").disabled = !config.timeline;
   $("timeline").hidden = !config.timeline;
   $("left").classList.toggle(
     "active",
@@ -159,8 +165,14 @@ $("voiceLeadMs").addEventListener("change", (e) =>
     Math.max(0, Math.min(350, Number(e.target.value) || 0)),
   ),
 );
+$("arrows-toggle").addEventListener("change", (e) =>
+  change("arrows", e.target.checked),
+);
 $("timeline-toggle").addEventListener("change", (e) =>
   change("timeline", e.target.checked),
+);
+$("timelineIdle-toggle").addEventListener("change", (e) =>
+  change("timelineIdle", e.target.checked),
 );
 $("voice-toggle").addEventListener("change", (e) =>
   change("voice", e.target.checked),
