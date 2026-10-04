@@ -64,7 +64,29 @@ type inputEvent struct {
 	Apex   bool
 	Detail string
 	X, Y   int
+	Code   int // keyboard scan code for "key" events
+	Down   bool
 }
+
+// The listener forwards only these two keys, or the next key pressed while a
+// binding is being captured. Every other keystroke is dropped unread.
+var strafeLeftCode, strafeRightCode atomic.Uint32
+var captureKey atomic.Bool
+
+// keyName returns the label Windows prints on the key with this scan code.
+func keyName(code int) string {
+	lparam := uintptr(code&0xFF) << 16
+	if code&0xE000 != 0 {
+		lparam |= 1 << 24
+	}
+	var text [64]uint16
+	n, _, _ := user32.NewProc("GetKeyNameTextW").Call(lparam, uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)))
+	if n == 0 {
+		return fmt.Sprintf("Key %#x", code)
+	}
+	return windows.UTF16ToString(text[:])
+}
+
 type nativeInput struct {
 	threadID uint32
 	done     chan struct{}
@@ -100,16 +122,19 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 			return
 		}
 		defer destroyWindow.Call(hwnd)
-		device := rawDevice{Page: 1, Usage: 2, Flags: 0x100, Target: hwnd} // background mouse only, no suppression
-		ok, _, err := registerRaw.Call(uintptr(unsafe.Pointer(&device)), 1, unsafe.Sizeof(device))
+		// Background mouse and keyboard, read-only: nothing is suppressed.
+		devices := [2]rawDevice{{Page: 1, Usage: 2, Flags: 0x100, Target: hwnd}, {Page: 1, Usage: 6, Flags: 0x100, Target: hwnd}}
+		ok, _, err := registerRaw.Call(uintptr(unsafe.Pointer(&devices[0])), 2, unsafe.Sizeof(devices[0]))
 		if ok == 0 {
-			ready <- fmt.Errorf("register mouse input: %w", err)
+			ready <- fmt.Errorf("register mouse and keyboard input: %w", err)
 			return
 		}
 		defer func() {
-			device.Flags = 1
-			device.Target = 0
-			registerRaw.Call(uintptr(unsafe.Pointer(&device)), 1, unsafe.Sizeof(device))
+			for i := range devices {
+				devices[i].Flags = 1
+				devices[i].Target = 0
+			}
+			registerRaw.Call(uintptr(unsafe.Pointer(&devices[0])), 2, unsafe.Sizeof(devices[0]))
 		}()
 		for i, key := range []uintptr{0x77, 0x78} { // F8 / F9; MOD_NOREPEAT
 			ok, _, err = registerHotKey.Call(hwnd, uintptr(i+1), 0x4000, key)
@@ -139,13 +164,25 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 			}
 			if msg.Message == 0x00FF {
 				at := time.Now()
-				// Fixed aligned buffer covers RAWINPUTHEADER + RAWMOUSE (48 bytes on x64).
+				// Fixed aligned buffer covers RAWINPUTHEADER (24 bytes on x64) plus
+				// RAWMOUSE (24) or RAWKEYBOARD (16).
 				var buffer [16]uint64
 				size := uint32(unsafe.Sizeof(buffer))
 				count, _, _ := rawData.Call(msg.LParam, 0x10000003, uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)), 24)
-				if count >= 48 && count <= unsafe.Sizeof(buffer) && size <= uint32(unsafe.Sizeof(buffer)) {
+				if count >= 40 && count <= unsafe.Sizeof(buffer) && size <= uint32(unsafe.Sizeof(buffer)) {
 					bytes := unsafe.Slice((*byte)(unsafe.Pointer(&buffer[0])), int(size))
-					if binary.LittleEndian.Uint32(bytes[:4]) == 0 {
+					if binary.LittleEndian.Uint32(bytes[:4]) == 1 {
+						code := uint32(binary.LittleEndian.Uint16(bytes[24:26]))
+						flags := binary.LittleEndian.Uint16(bytes[26:28])
+						if flags&2 != 0 {
+							code |= 0xE000 // extended key (arrows, right-hand modifiers)
+						}
+						down := flags&1 == 0
+						if code == strafeLeftCode.Load() || code == strafeRightCode.Load() || (down && captureKey.Load()) {
+							events <- inputEvent{Kind: "key", At: at, Code: int(code), Down: down}
+						}
+					}
+					if count >= 48 && binary.LittleEndian.Uint32(bytes[:4]) == 0 {
 						flags := binary.LittleEndian.Uint16(bytes[28:30])
 						if flags&1 != 0 {
 							events <- inputEvent{Kind: "down", At: at, Apex: apexForeground()}

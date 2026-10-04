@@ -16,6 +16,8 @@ type Settings struct {
 	OffsetX        int  `json:"offsetX"`
 	OffsetY        int  `json:"offsetY"`
 	TimelineOffset int  `json:"timelineOffset"`
+	LeftKey        int  `json:"leftKey"` // keyboard scan codes; 0xE000 marks extended keys
+	RightKey       int  `json:"rightKey"`
 	Voice          bool `json:"voice"`
 	VoiceLeadMS    int  `json:"voiceLeadMs"`
 	X              int  `json:"x"`
@@ -26,7 +28,7 @@ type Settings struct {
 }
 
 func defaultSettings() Settings {
-	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
+	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, LeftKey: 0x1E, RightKey: 0x20, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -44,6 +46,9 @@ func (s Settings) normalized() Settings {
 	s.TimelineOffset = clamp(s.TimelineOffset, 12, 100)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
 	s.OffsetY = clamp(s.OffsetY, -10000, 10000)
+	if s.LeftKey <= 0 || s.RightKey <= 0 || s.LeftKey == s.RightKey {
+		s.LeftKey, s.RightKey = 0x1E, 0x20 // A and D
+	}
 	s.VoiceLeadMS = clamp(s.VoiceLeadMS, 0, 350)
 	s.Width = clamp(s.Width, 520, 1400)
 	s.Height = clamp(s.Height, 560, 1000)

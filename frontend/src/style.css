@@ -226,7 +226,16 @@ button:hover {
   height: 24px;
   display: flex;
   position: relative;
-  gap: 3px;
+}
+/* Each switch is a 3px cut centred on its exact time; .player-track i repeats it. */
+.segment + .segment {
+  border-left: 1.5px solid transparent;
+}
+.segment:not(:nth-last-child(2)) {
+  border-right: 1.5px solid transparent;
+}
+.segment {
+  background-clip: padding-box !important;
 }
 .segment {
   display: flex;
@@ -271,6 +280,47 @@ button:hover {
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-top: 4px solid white;
+}
+.player-track {
+  position: relative;
+  height: 24px;
+  margin: 4px 0 0;
+  background: #263036;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.player-track span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.player-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateX(-50%);
+  background: #0b131c;
+}
+.player-track .right {
+  background: var(--mint);
+}
+.player-track .left {
+  background: var(--coral);
+}
+.ticks .good {
+  color: var(--mint);
+}
+.ticks .close {
+  color: #f0c86e;
+}
+.ticks .off {
+  color: var(--coral);
+}
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ticks {
   position: relative;
@@ -342,11 +392,11 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 18px 0 12px;
+  margin: 12px 0 10px;
   font-size: 11px;
 }
 .options-row.second {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 .check {
   display: flex;

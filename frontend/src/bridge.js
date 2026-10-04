@@ -34,6 +34,12 @@ const mock = {
   direction: "right",
   runId: 0,
   error: "",
+  player: [],
+  playerEndMs: 0,
+  score: null,
+  leftKey: "A",
+  rightKey: "D",
+  binding: "",
 };
 let listener, timer, started, nextCue;
 const sounds = { left: new Audio(leftURL), right: new Audio(rightURL) };
@@ -106,6 +112,10 @@ const browserAPI = {
   ToggleMode: async () => {
     mock.error =
       "Open the Windows app to use global input and click-through mode.";
+    return emit();
+  },
+  BindKey: async (side) => {
+    mock.binding = mock.binding === side ? "" : side;
     return emit();
   },
   ToggleMove: async () => {

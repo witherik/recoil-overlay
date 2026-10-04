@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"unsafe"
 
+	"recoil-overlay/internal/pattern"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -31,6 +33,9 @@ const arrowAnchorY = 142.0
 // Opacity of the arrow that is not currently called for (the frontend matches).
 const inactiveArrowAlpha = 40
 
+// Height of the timeline box: header, expected track, player track, ticks.
+const timelineHeight = 107.0
+
 var practiceFrameValid bool
 var lastPracticeFrame frameKey
 
@@ -42,6 +47,7 @@ type frameKey struct {
 	Direction, Status string
 	Armed, Moving     bool
 	Held, Editing     bool
+	Revision          uint64
 }
 type point struct{ X, Y int32 }
 type bitmapHeader struct {
@@ -62,7 +68,7 @@ type blendFunction struct{ Operation, Flags, Alpha, Format byte }
 func overlaySize(s Settings, scale float64) (int32, int32) {
 	height := arrowAnchorY + float64(s.ArrowSize)/2 + 12
 	if s.Timeline {
-		height += float64(s.TimelineOffset) + 79 - 4
+		height += float64(s.TimelineOffset) + timelineHeight - 4
 	}
 	return int32(math.Round(464 * scale)), int32(math.Round(height * scale))
 }
@@ -97,7 +103,7 @@ func renderPractice(s Snapshot) error {
 	if dpi == 0 {
 		dpi = 96
 	}
-	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving, s.Held, s.Editing}
+	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving, s.Held, s.Editing, s.revision}
 	if practiceFrameValid && key == lastPracticeFrame {
 		return nil
 	}
@@ -141,6 +147,40 @@ func renderPractice(s Snapshot) error {
 	return nil
 }
 
+func scoreSummary(score pattern.Score) string {
+	made := len(score.Switches) - score.Missed
+	switch {
+	case len(score.Switches) == 0:
+		return "NO SWITCHES"
+	case made == 0:
+		return fmt.Sprintf("%d MISSED", score.Missed)
+	case score.Missed > 0:
+		return fmt.Sprintf("AVG %d ms / %d MISSED", score.AverageMS, score.Missed)
+	}
+	return fmt.Sprintf("AVG %d ms", score.AverageMS)
+}
+func deviationLabel(change pattern.Change) string {
+	if change.Missed {
+		return "MISS"
+	}
+	return fmt.Sprintf("%+d ms", change.DeviationMS)
+}
+
+// Within 40 ms reads as on time, within 100 ms as close.
+func deviationColor(change pattern.Change) color.NRGBA {
+	off := change.DeviationMS
+	if off < 0 {
+		off = -off
+	}
+	switch {
+	case change.Missed || off > 100:
+		return color.NRGBA{244, 161, 140, 255}
+	case off > 40:
+		return color.NRGBA{240, 200, 110, 255}
+	}
+	return color.NRGBA{112, 227, 192, 255}
+}
+
 type canvas struct {
 	image *image.RGBA
 	scale float64
@@ -158,6 +198,10 @@ func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
 	defer face.Close()
 	d := font.Drawer{Dst: c.image, Src: image.NewUniform(col), Face: face, Dot: fixed.P(int(math.Round(x*c.scale)), int(math.Round(y*c.scale)))}
 	d.DrawString(text)
+}
+func (c canvas) face(size float64) font.Face {
+	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
+	return face
 }
 func (c canvas) centeredText(center, y, size float64, text string, col color.NRGBA) {
 	face, err := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
@@ -262,33 +306,87 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		w := math.Min(420, float64(width)/scale-44)
 		x := center - w/2
 		y := arrowAnchorY + size/2 + float64(s.Settings.TimelineOffset)
-		c.rect(x, y, w, 79, color.NRGBA{10, 17, 27, 215})
+		box := color.NRGBA{10, 17, 27, 215}
+		c.rect(x, y, w, timelineHeight, box)
 		c.text(x+12, y+17, 10, "R-301", text)
 		c.text(x+55, y+17, 8, "EXPECTED STRAFE", dim)
-		c.text(x+w-94, y+17, 10, fmt.Sprintf("%.2f / 2.21 s", float64(s.ElapsedMS)/1000), dim)
+		// Between sprays the last one stays up for review, with its score.
+		review := !s.Running && s.Score != nil
+		playheadMS := s.ElapsedMS
+		summary := fmt.Sprintf("%.2f / 2.21 s", float64(s.ElapsedMS)/1000)
+		if review {
+			playheadMS = s.PlayerEndMS
+			summary = scoreSummary(*s.Score)
+		}
+		summaryFace := c.face(10)
+		c.text(x+w-12-float64(font.MeasureString(summaryFace, summary).Ceil())/scale, y+17, 10, summary, dim)
+		summaryFace.Close()
 		track := w - 24
 		offset := 0.0
 		durations := []float64{800, 530, 880}
 		labels := []string{"R  800 ms", "L  530 ms", "R  880 ms"}
+		// Each switch is a 3 px cut centred on its exact time. The same cut runs
+		// through the player's bar below, so the two rows line up.
+		const cut = 3.0
 		for i, duration := range durations {
-			segment := track * duration / 2210
+			from, to := x+12+offset, x+12+offset+track*duration/2210
+			if i > 0 {
+				from += cut / 2
+			}
+			if i < len(durations)-1 {
+				to -= cut / 2
+			}
 			fill := color.NRGBA{32, 63, 56, 255}
 			accent := mint
 			if i == 1 {
 				fill = color.NRGBA{72, 49, 45, 255}
 				accent = coral
 			}
-			c.rect(x+12+offset, y+30, segment-3, 24, fill)
-			c.rect(x+12+offset, y+30, segment-3, 2, accent)
-			c.centeredText(x+12+offset+(segment-3)/2, y+46, 10, labels[i], text)
-			offset += segment
+			c.rect(from, y+30, to-from, 24, fill)
+			c.rect(from, y+30, to-from, 2, accent)
+			c.centeredText((from+to)/2, y+46, 10, labels[i], text)
+			offset += track * duration / 2210
 		}
-		head := x + 12 + track*math.Min(1, float64(s.ElapsedMS)/2210)
-		c.rect(head-1, y+27, 2, 30, color.NRGBA{255, 255, 255, 255})
-		c.text(x+12, y+70, 8, "0", dim)
-		c.centeredText(x+12+track*800/2210, y+70, 8, "0.80", dim)
-		c.centeredText(x+12+track*1330/2210, y+70, 8, "1.33", dim)
-		c.text(x+w-34, y+70, 8, "2.21 s", dim)
+		// The player's own strafes, on the same time axis; grey is neutral.
+		c.rect(x+12, y+58, track, 24, color.NRGBA{38, 48, 54, 255})
+		for _, segment := range s.Player {
+			fill := mint
+			switch segment.Direction {
+			case "left":
+				fill = coral
+			case "right":
+			default:
+				continue
+			}
+			from := math.Min(track, track*float64(segment.StartMS)/2210)
+			to := math.Min(track, track*float64(segment.EndMS)/2210)
+			c.rect(x+12+from, y+58, to-from, 24, fill)
+		}
+		for _, dueMS := range []float64{800, 1330} {
+			c.rect(x+12+track*dueMS/2210-cut/2, y+58, cut, 24, box)
+		}
+		head := x + 12 + track*math.Min(1, float64(playheadMS)/2210)
+		c.rect(head-1, y+27, 2, 58, color.NRGBA{255, 255, 255, 255})
+		ticks := []struct {
+			atMS  int64
+			label string
+		}{{0, "0"}, {800, "0.80"}, {1330, "1.33"}}
+		for i, tick := range ticks {
+			label, col := tick.label, dim
+			if review {
+				for _, change := range s.Score.Switches {
+					if change.AtMS == tick.atMS {
+						label, col = deviationLabel(change), deviationColor(change)
+					}
+				}
+			}
+			if i == 0 {
+				c.text(x+12, y+98, 8, label, col)
+			} else {
+				c.centeredText(x+12+track*float64(tick.atMS)/2210, y+98, 8, label, col)
+			}
+		}
+		c.text(x+w-34, y+98, 8, "2.21 s", dim)
 	}
 	return img
 }

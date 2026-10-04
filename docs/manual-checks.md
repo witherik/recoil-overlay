@@ -15,6 +15,12 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 - [ ] Press F9 during a run. Confirm input is disabled and the run resets. Press F9 again, release any held click, then press again to verify a fresh click starts the pattern.
 - [ ] Press F8 to return to edit mode. Confirm controls can be used and Preview pattern runs without Apex Legends in the foreground.
 
+## Strafe reading and score
+
+- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills mint for right and coral for left as the playhead moves, and stays grey while neither or both keys are held.
+- [ ] Release. Confirm the spray stays on the timeline with a signed deviation under each switch and an average in the header, until the next click.
+- [ ] Rebind a strafe key in edit mode, then confirm the new key is read and the old one is ignored. Press Escape while rebinding and confirm nothing changes.
+
 ## Voice and saved settings
 
 - [ ] Enable Voice cues and preview a pattern. Confirm embedded `right` and `left` clips play offline.

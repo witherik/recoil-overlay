@@ -18,11 +18,13 @@ The built-in pattern is fixed at:
 | Left | 530 ms |
 | Right | 880 ms |
 
-The native Windows input listener uses Raw Input for left mouse button down/up events. Hold left-click while Apex Legends is the foreground window to start the pattern. Releasing cancels and resets it. The pattern ends after 2.21 seconds and does not loop; release and press again for another run.
+The native Windows input listener uses Raw Input for left mouse button down/up events and for the two strafe keys; every other keystroke is discarded unread. Hold left-click while Apex Legends is the foreground window to start the pattern. Releasing cancels and resets it. The pattern ends after 2.21 seconds and does not loop; release and press again for another run.
 
 - **F8** switches between edit mode and practice mode. Practice mode makes the overlay click-through; press F8 again to edit.
 - **Move overlay** shows the overlay with a backdrop so you can drag it into place; **Done moving** hides it again. The position is saved as an offset from the middle of the Apex window (or of the current monitor when Apex is not running), so it follows resolution changes. The first run starts centered, and **Center** resets it. Use this to correct the placement on mixed-DPI setups.
 - **Hide timeline while shooting** keeps the timeline visible between sprays but removes it from the overlay while left-click is held.
+- **Your strafes** are drawn in a second bar under the expected one, on the same time axis: mint while you strafe right, coral for left, grey for neutral (no key, or both held). The **Strafe keys** buttons set which two keyboard keys are read (A and D by default): click one, then press the key; Escape cancels.
+- **Score:** when a spray ends, it stays on the timeline until the next one. Each expected switch shows how early (−) or late (+) you made it, or MISS, and the header shows the average. Sprays shorter than 250 ms are ignored, and a switch is only judged if you kept firing long enough to make it.
 - **F9** disables or enables practice input. Re-enabling requires a fresh click (release, then press).
 - The game must have the foreground title **Apex Legends** for a held click to start a run.
 - **Preview pattern** runs from edit mode without Apex Legends. Use it to inspect the arrows and timeline.
@@ -84,7 +86,7 @@ The Wails window provides the editable settings UI. During practice that window 
 
 Automated Windows tests verify input/hotkey registration cleanup, alpha-bitmap submission, and showing/hiding the practice overlay over a hidden test-owned window. The canvas is tested at 100%, 150%, and 200% scale. These tests do not establish in-game display compatibility.
 
-This first version has only the R-301 preset and an expected-direction timeline. Actual A/D history, shot markers, scoring, automatic weapon detection, and additional weapon profiles are future work. A click is an intent to shoot; the overlay cannot detect reloads, ammunition or recoil reset state. Use uninterrupted sprays and release between attempts.
+This first version has only the R-301 preset and an expected-direction timeline. Shot markers, automatic weapon detection, and additional weapon profiles are future work. A click is an intent to shoot; the overlay cannot detect reloads, ammunition or recoil reset state. Use uninterrupted sprays and release between attempts.
 
 ## Attribution and license
 

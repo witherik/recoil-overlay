@@ -28,6 +28,24 @@ type Snapshot struct {
 	Direction  string          `json:"direction"`
 	RunID      uint64          `json:"runId"`
 	Error      string          `json:"error"`
+
+	// The player's own strafes: live while a spray runs, then the last spray.
+	Player      []pattern.Segment `json:"player"`
+	PlayerEndMS int64             `json:"playerEndMs"`
+	Score       *pattern.Score    `json:"score"`
+	LeftKey     string            `json:"leftKey"`
+	RightKey    string            `json:"rightKey"`
+	Binding     string            `json:"binding"`
+	revision    uint64
+}
+
+// A spray shorter than this is a tap, and does not replace the last review.
+const minReviewMS = 250
+
+type review struct {
+	track []pattern.Segment
+	endMS int64
+	score pattern.Score
 }
 type App struct {
 	mu                                                          sync.Mutex
@@ -39,6 +57,11 @@ type App struct {
 	done                                                        chan struct{}
 	editing, armed, focused, inputReady, running, preview, held bool
 	moving                                                      bool
+	leftDown, rightDown                                         bool
+	binding                                                     string // "left" or "right" while waiting for a key
+	track                                                       []pattern.Segment
+	last                                                        *review
+	revision                                                    uint64
 	started                                                     time.Time
 	elapsed                                                     int64
 	runID                                                       uint64
@@ -61,6 +84,7 @@ func (a *App) ready(ctx context.Context) {
 	if s.Positioned {
 		restorePosition(ctx, s.X, s.Y)
 	}
+	a.syncKeysLocked()
 	overlayMoved = func(x, y int) { a.events <- inputEvent{Kind: "moved", X: x, Y: y} }
 	err := startOverlayWindow()
 	var in *nativeInput
@@ -130,7 +154,26 @@ func (a *App) handleInputLocked(e inputEvent) {
 	case "up":
 		a.held = false
 		if !a.preview {
+			if a.running && !e.At.IsZero() {
+				a.elapsed = a.clockLocked(e.At)
+			}
 			a.cancelLocked()
+		}
+	case "key":
+		if a.binding != "" {
+			if e.Down {
+				a.bindLocked(e.Code)
+			}
+			return
+		}
+		if e.Code == a.settings.LeftKey {
+			a.leftDown = e.Down
+		}
+		if e.Code == a.settings.RightKey {
+			a.rightDown = e.Down
+		}
+		if a.running {
+			a.strafeLocked(a.clockLocked(e.At))
 		}
 	case "moved":
 		if a.moving {
@@ -163,17 +206,20 @@ func (a *App) advanceLocked(now time.Time, focused bool) {
 	}
 	if a.elapsed >= int64(pattern.TotalMS(pattern.R301())) {
 		a.elapsed = int64(pattern.TotalMS(pattern.R301()))
+		a.finishLocked(a.elapsed)
 		a.running = false
 		a.silence()
 		return
 	}
+	a.strafeLocked(a.elapsed)
 	// If the process was stalled, announce only the latest due cue, never a backlog.
 	due := -1
 	for a.nextCue < len(a.cues) && a.elapsed >= a.cues[a.nextCue].AtMS {
 		due = a.nextCue
 		a.nextCue++
 	}
-	if due >= 0 && a.settings.Voice {
+	// Neutral phases (a charge-up before the first strafe) have no voice line.
+	if due >= 0 && a.settings.Voice && a.cues[due].Direction != "" {
 		a.speak(a.cues[due].Direction)
 	}
 }
@@ -184,6 +230,8 @@ func (a *App) startLocked(at time.Time, preview bool) {
 	a.running = true
 	a.preview = preview
 	a.elapsed = 0
+	a.track = []pattern.Segment{{Direction: a.strafeDirection()}}
+	a.revision++
 	a.cues = pattern.Cues(pattern.R301(), a.settings.VoiceLeadMS)
 	a.nextCue = 0
 	if a.settings.Voice {
@@ -191,7 +239,89 @@ func (a *App) startLocked(at time.Time, preview bool) {
 	}
 	a.nextCue = 1
 }
+
+// clockLocked converts a capture time to milliseconds into the current spray.
+func (a *App) clockLocked(at time.Time) int64 {
+	return min(max(at.Sub(a.started).Milliseconds(), 0), int64(pattern.TotalMS(pattern.R301())))
+}
+
+// strafeDirection is where the held keys move the player; both or neither is neutral.
+func (a *App) strafeDirection() string {
+	switch {
+	case a.leftDown && !a.rightDown:
+		return "left"
+	case a.rightDown && !a.leftDown:
+		return "right"
+	}
+	return ""
+}
+
+// strafeLocked extends the player's track to ms, opening a new segment when
+// the strafe direction has changed.
+func (a *App) strafeLocked(ms int64) {
+	if len(a.track) == 0 {
+		return
+	}
+	current := &a.track[len(a.track)-1]
+	current.EndMS = max(current.EndMS, ms)
+	if direction := a.strafeDirection(); direction != current.Direction {
+		a.track = append(a.track, pattern.Segment{StartMS: current.EndMS, EndMS: current.EndMS, Direction: direction})
+		a.revision++
+	}
+}
+
+// finishLocked closes the spray at endMS and keeps it for review.
+func (a *App) finishLocked(endMS int64) {
+	a.strafeLocked(endMS)
+	if endMS >= minReviewMS {
+		a.last = &review{track: a.track, endMS: endMS, score: pattern.Evaluate(pattern.R301(), a.track, endMS)}
+	}
+	a.track = nil
+	a.revision++
+}
+func (a *App) syncKeysLocked() {
+	strafeLeftCode.Store(uint32(a.settings.LeftKey))
+	strafeRightCode.Store(uint32(a.settings.RightKey))
+	captureKey.Store(a.binding != "")
+}
+
+// bindLocked assigns the pressed key to the side being rebound. Escape cancels;
+// taking the other side's key swaps the two.
+func (a *App) bindLocked(code int) {
+	if code != 0x01 {
+		left, right := &a.settings.LeftKey, &a.settings.RightKey
+		if a.binding == "right" {
+			left, right = right, left
+		}
+		if code == *right {
+			*right = *left
+		}
+		*left = code
+		a.saveLocked()
+	}
+	a.binding = ""
+	a.leftDown, a.rightDown = false, false
+	a.syncKeysLocked()
+}
+
+// BindKey waits for the next key press and makes it the strafe key for side
+// ("left" or "right"). Calling it again for the same side cancels.
+func (a *App) BindKey(side string) Snapshot {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.editing && (side == "left" || side == "right") && a.binding != side {
+		a.binding = side
+	} else {
+		a.binding = ""
+	}
+	a.syncKeysLocked()
+	a.emitLocked()
+	return a.snapshotLocked()
+}
 func (a *App) cancelLocked() {
+	if a.running {
+		a.finishLocked(a.elapsed)
+	}
 	if a.running || a.preview {
 		a.silence()
 	}
@@ -201,7 +331,15 @@ func (a *App) cancelLocked() {
 }
 func (a *App) snapshotLocked() Snapshot {
 	idx, dir, _ := pattern.At(pattern.R301(), a.elapsed)
-	return Snapshot{Settings: a.settings, Phases: pattern.R301(), Editing: a.editing, Armed: a.armed, Focused: a.focused, InputReady: a.inputReady, Running: a.running, Preview: a.preview, Moving: a.moving, Held: a.held, ElapsedMS: a.elapsed, TotalMS: pattern.TotalMS(pattern.R301()), Phase: idx, Direction: dir, RunID: a.runID, Error: a.err}
+	player, playerEnd, score := a.track, a.elapsed, (*pattern.Score)(nil)
+	if !a.running {
+		player, playerEnd = nil, 0
+		if a.last != nil {
+			player, playerEnd, score = a.last.track, a.last.endMS, &a.last.score
+		}
+	}
+	return Snapshot{Player: append([]pattern.Segment{}, player...), PlayerEndMS: playerEnd, Score: score, LeftKey: keyName(a.settings.LeftKey), RightKey: keyName(a.settings.RightKey), Binding: a.binding, revision: a.revision,
+		Settings: a.settings, Phases: pattern.R301(), Editing: a.editing, Armed: a.armed, Focused: a.focused, InputReady: a.inputReady, Running: a.running, Preview: a.preview, Moving: a.moving, Held: a.held, ElapsedMS: a.elapsed, TotalMS: pattern.TotalMS(pattern.R301()), Phase: idx, Direction: dir, RunID: a.runID, Error: a.err}
 }
 func (a *App) emitLocked() {
 	if !a.editing || a.moving {
@@ -227,6 +365,8 @@ func (a *App) toggleLocked() {
 		return
 	}
 	editing := !a.editing
+	a.binding = ""
+	a.syncKeysLocked()
 	mode := overlayPractice
 	if editing {
 		mode = overlayHidden
@@ -312,6 +452,8 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	s.Positioned = a.settings.Positioned
 	s.OffsetX = a.settings.OffsetX
 	s.OffsetY = a.settings.OffsetY
+	s.LeftKey = a.settings.LeftKey
+	s.RightKey = a.settings.RightKey
 	s.Width = a.settings.Width
 	s.Height = a.settings.Height
 	a.settings = s.normalized()

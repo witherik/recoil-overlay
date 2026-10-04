@@ -6,7 +6,7 @@ document.querySelector("#app").innerHTML = `
   <section class="stage" aria-label="Strafe guidance">
    <div class="alignment"><span></span><small>PREVIEW</small><span></span></div>
    <div class="arrows"><div id="left" class="arrow left" aria-label="Strafe left"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 12 17 32l20 20M18 32h34"/></svg></div><div class="crosshair-guide" aria-hidden="true">+</div><div id="right" class="arrow right" aria-label="Strafe right"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="m27 12 20 20-20 20M46 32H12"/></svg></div></div>
-   <div id="timeline" class="timeline"><div class="timeline-top"><span>R-301 <small>EXPECTED STRAFE</small></span><span id="elapsed">0.00 / 2.21 s</span></div><div class="track"><div class="segment right-segment" style="flex:800"><span>R <small>800 ms</small></span></div><div class="segment left-segment" style="flex:530"><span>L <small>530 ms</small></span></div><div class="segment right-segment" style="flex:880"><span>R <small>880 ms</small></span></div><div id="playhead"></div></div><div class="ticks"><span>0</span><span>0.80</span><span>1.33</span><span>2.21 s</span></div></div>
+   <div id="timeline" class="timeline"><div class="timeline-top"><span>R-301 <small>EXPECTED STRAFE</small></span><span id="elapsed">0.00 / 2.21 s</span></div><div class="track"><div class="segment right-segment" style="flex:800"><span>R <small>800 ms</small></span></div><div class="segment left-segment" style="flex:530"><span>L <small>530 ms</small></span></div><div class="segment right-segment" style="flex:880"><span>R <small>880 ms</small></span></div><div id="playhead"></div></div><div id="player" class="player-track"></div><div class="ticks"><span>0</span><span>0.80</span><span>1.33</span><span>2.21 s</span></div></div>
   </section>
   <section class="controls">
    <div class="section-heading"><span>OVERLAY SETUP</span><span class="drag-hint">Drag the header · resize the window</span></div>
@@ -16,9 +16,9 @@ document.querySelector("#app").innerHTML = `
     <label>Opacity <output id="opacity-value"></output><input id="opacity" type="range" min="20" max="100"></label>
     <label>Timeline spacing <output id="timelineOffset-value"></output><input id="timelineOffset" type="range" min="12" max="100" step="2"></label>
    </div>
-   <div class="options-row"><label class="check"><input id="arrows-toggle" type="checkbox">Arrows</label><label class="check"><input id="timeline-toggle" type="checkbox">Timeline</label><label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide timeline while shooting</label></div><div class="options-row second"><label class="check"><input id="voice-toggle" type="checkbox">Voice</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
+   <div class="options-row"><label class="check"><input id="arrows-toggle" type="checkbox">Arrows</label><label class="check"><input id="timeline-toggle" type="checkbox">Timeline</label><label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide timeline while shooting</label><span class="keys" title="Keys read to draw your own strafes under the timeline">Strafe keys<button id="bind-left" class="mini"></button><button id="bind-right" class="mini"></button></span></div><div class="options-row second"><label class="check"><input id="voice-toggle" type="checkbox">Voice</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
    <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd>F8</kbd></button></div>
-   <p class="helper">Hold left-click in Apex to begin. Release to reset.<br><kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable · then click again</p>
+   <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable</p>
    <p id="error" role="alert" hidden></p>
   </section>
  </main>
@@ -35,6 +35,14 @@ let state,
 function error(err) {
   $("error").hidden = false;
   $("error").textContent = String(err);
+}
+function scoreSummary(score) {
+  const made = score.switches.length - score.missed;
+  if (!score.switches.length) return "NO SWITCHES";
+  if (!made) return `${score.missed} MISSED`;
+  return score.missed
+    ? `AVG ${score.averageMs} ms / ${score.missed} MISSED`
+    : `AVG ${score.averageMs} ms`;
 }
 function render(s) {
   state = s;
@@ -56,7 +64,7 @@ function render(s) {
   );
   const controlsTop = Math.max(
     275,
-    76 + 66 + config.arrowSize / 2 + config.timelineOffset + 100,
+    76 + 66 + config.arrowSize / 2 + config.timelineOffset + 128,
   );
   document.documentElement.style.setProperty(
     "--controls-top",
@@ -91,8 +99,56 @@ function render(s) {
     "active",
     s.direction === "right" && (s.armed || s.preview),
   );
-  $("elapsed").textContent = `${(s.elapsedMs / 1000).toFixed(2)} / 2.21 s`;
-  $("playhead").style.left = `${Math.min(100, (s.elapsedMs / 2210) * 100)}%`;
+  // Between sprays the last one stays up for review, with its score.
+  const review = !s.running && s.score;
+  const playheadMs = review ? s.playerEndMs : s.elapsedMs;
+  $("elapsed").textContent = review
+    ? scoreSummary(s.score)
+    : `${(s.elapsedMs / 1000).toFixed(2)} / 2.21 s`;
+  $("playhead").style.left = `${Math.min(100, (playheadMs / 2210) * 100)}%`;
+  $("player").replaceChildren(
+    ...(s.player || [])
+      .filter((segment) => segment.direction)
+      .map((segment) => {
+        const bar = document.createElement("span");
+        bar.className = segment.direction;
+        bar.style.left = `${(segment.startMs / 2210) * 100}%`;
+        bar.style.width = `${((segment.endMs - segment.startMs) / 2210) * 100}%`;
+        return bar;
+      }),
+    // Cuts where each switch was due, continuing the gaps of the bar above.
+    ...[800, 1330].map((dueMs) => {
+      const mark = document.createElement("i");
+      mark.style.left = `${(dueMs / 2210) * 100}%`;
+      return mark;
+    }),
+  );
+  [
+    [0, "0"],
+    [800, "0.80"],
+    [1330, "1.33"],
+  ].forEach(([atMs, label], index) => {
+    const tick = document.querySelectorAll(".ticks span")[index];
+    const change = review && s.score.switches.find((c) => c.atMs === atMs);
+    tick.textContent = !change
+      ? label
+      : change.missed
+        ? "MISS"
+        : `${change.deviationMs > 0 ? "+" : ""}${change.deviationMs} ms`;
+    const off = change ? Math.abs(change.deviationMs) : 0;
+    tick.className = !change
+      ? ""
+      : change.missed || off > 100
+        ? "off"
+        : off > 40
+          ? "close"
+          : "good";
+  });
+  for (const side of ["left", "right"]) {
+    $(`bind-${side}`).textContent =
+      s.binding === side ? "press a key…" : s[`${side}Key`] || "?";
+    $(`bind-${side}`).classList.toggle("active", s.binding === side);
+  }
   $("preview").textContent =
     s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
   $("move").textContent = s.moving ? "Done moving" : "Move overlay";
@@ -194,6 +250,11 @@ $("lock").onclick = async () => {
     error(e);
   }
 };
+for (const side of ["left", "right"])
+  $(`bind-${side}`).onclick = (e) => {
+    e.target.blur(); // so Space or Enter can be bound without re-clicking
+    api.BindKey(side).then(render).catch(error);
+  };
 $("move").onclick = async () => {
   try {
     await flushSettings();

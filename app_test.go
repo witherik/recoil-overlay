@@ -1,6 +1,7 @@
 package main
 
 import (
+	"recoil-overlay/internal/pattern"
 	"reflect"
 	"testing"
 	"time"
@@ -110,5 +111,71 @@ func TestFocusLossAndPreview(t *testing.T) {
 	a.advanceLocked(at.Add(800*time.Millisecond), false)
 	if !a.running || a.snapshotLocked().Direction != "left" {
 		t.Fatal("preview should work outside Apex")
+	}
+}
+
+func TestStrafeTrackAndReview(t *testing.T) {
+	a, _ := testApp()
+	at := time.Now()
+	key := func(code int, down bool, ms int) {
+		a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: down, At: at.Add(time.Duration(ms) * time.Millisecond)})
+	}
+	left, right := a.settings.LeftKey, a.settings.RightKey
+	key(right, true, -200) // already strafing when the spray starts
+	a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+	key(right, true, 30) // auto-repeat changes nothing
+	key(left, true, 780) // both held: neutral
+	key(right, false, 820)
+	a.advanceLocked(at.Add(1000*time.Millisecond), true)
+	if live := a.snapshotLocked(); live.Score != nil || live.PlayerEndMS != 1000 || len(live.Player) != 3 {
+		t.Fatalf("live snapshot: %+v", live)
+	}
+	key(left, false, 1340)
+	key(right, true, 1360)
+	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(1900 * time.Millisecond)})
+
+	s := a.snapshotLocked()
+	seg := func(from, to int64, direction string) pattern.Segment {
+		return pattern.Segment{StartMS: from, EndMS: to, Direction: direction}
+	}
+	want := []pattern.Segment{seg(0, 780, "right"), seg(780, 820, ""), seg(820, 1340, "left"), seg(1340, 1360, ""), seg(1360, 1900, "right")}
+	if !reflect.DeepEqual(s.Player, want) || s.PlayerEndMS != 1900 || s.ElapsedMS != 0 {
+		t.Fatalf("review track: %+v end %d", s.Player, s.PlayerEndMS)
+	}
+	if s.Score == nil || s.Score.AverageMS != 17 || s.Score.Missed != 0 || s.Score.Switches[1].DeviationMS != 20 || s.Score.Switches[2].DeviationMS != 30 {
+		t.Fatalf("score: %+v", s.Score)
+	}
+	// A tap does not wipe the review; a real spray replaces it.
+	a.handleInputLocked(inputEvent{Kind: "down", At: at.Add(3 * time.Second), Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(3100 * time.Millisecond)})
+	if got := a.snapshotLocked(); got.PlayerEndMS != 1900 {
+		t.Fatalf("tap replaced the review: %+v", got)
+	}
+	a.handleInputLocked(inputEvent{Kind: "down", At: at.Add(4 * time.Second), Apex: true})
+	a.advanceLocked(at.Add(7*time.Second), true)
+	if got := a.snapshotLocked(); got.PlayerEndMS != 2210 || got.Score == nil || got.Score.Missed != 2 || got.Running || got.Player[0].EndMS != 2210 {
+		t.Fatalf("completed spray: %+v %+v", got, got.Score)
+	}
+}
+
+func TestBindKey(t *testing.T) {
+	a, _ := testApp()
+	a.editing = true
+	left, right := a.settings.LeftKey, a.settings.RightKey
+	bind := func(side string, code int) {
+		a.binding = side
+		a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: true})
+	}
+	bind("left", 0x01) // Escape cancels
+	if a.binding != "" || a.settings.LeftKey != left {
+		t.Fatal("escape should cancel")
+	}
+	bind("left", 0xE04B)
+	if a.settings.LeftKey != 0xE04B || a.settings.RightKey != right || a.leftDown {
+		t.Fatalf("bind left: %+v", a.settings)
+	}
+	bind("right", 0xE04B) // taking the other side's key swaps them
+	if a.settings.RightKey != 0xE04B || a.settings.LeftKey != right {
+		t.Fatalf("swap: %+v", a.settings)
 	}
 }
