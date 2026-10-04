@@ -1,10 +1,10 @@
 import "./style.css";
 import { api, native, onState } from "./bridge";
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="center" title="Center window">⌖</button><button id="quit" title="Close application">×</button></div></header>
+ <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="quit" title="Close application">×</button></div></header>
  <main>
   <section class="stage" aria-label="Strafe guidance">
-   <div class="alignment"><span></span><small>ALIGN WITH YOUR CROSSHAIR</small><span></span></div>
+   <div class="alignment"><span></span><small>PREVIEW</small><span></span></div>
    <div class="arrows"><div id="left" class="arrow left" aria-label="Strafe left"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 12 17 32l20 20M18 32h34"/></svg></div><div class="crosshair-guide" aria-hidden="true">+</div><div id="right" class="arrow right" aria-label="Strafe right"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="m27 12 20 20-20 20M46 32H12"/></svg></div></div>
    <div id="timeline" class="timeline"><div class="timeline-top"><span>R-301 <small>EXPECTED STRAFE</small></span><span id="elapsed">0.00 / 2.21 s</span></div><div class="track"><div class="segment right-segment" style="flex:800"><span>R <small>800 ms</small></span></div><div class="segment left-segment" style="flex:530"><span>L <small>530 ms</small></span></div><div class="segment right-segment" style="flex:880"><span>R <small>880 ms</small></span></div><div id="playhead"></div></div><div class="ticks"><span>0</span><span>0.80</span><span>1.33</span><span>2.21 s</span></div></div>
   </section>
@@ -16,7 +16,7 @@ document.querySelector("#app").innerHTML = `
     <label>Opacity <output id="opacity-value"></output><input id="opacity" type="range" min="20" max="100"></label>
     <label>Timeline spacing <output id="timelineOffset-value"></output><input id="timelineOffset" type="range" min="12" max="100" step="2"></label>
    </div>
-   <div class="options-row"><label class="check"><input id="timeline-toggle" type="checkbox">Show timeline</label><label class="check" title="Snap the arrows to the middle of the Apex window when practice starts"><input id="autoCenter-toggle" type="checkbox">Auto-center</label><label class="check"><input id="voice-toggle" type="checkbox">Voice cues</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label></div>
+   <div class="options-row"><label class="check"><input id="timeline-toggle" type="checkbox">Show timeline</label><label class="check"><input id="voice-toggle" type="checkbox">Voice cues</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
    <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd>F8</kbd></button></div>
    <p class="helper">Hold left-click in Apex to begin. Release to reset.<br><kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable · then click again</p>
    <p id="error" role="alert" hidden></p>
@@ -74,7 +74,6 @@ function render(s) {
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
   $("timeline-toggle").checked = config.timeline;
-  $("autoCenter-toggle").checked = config.autoCenter;
   $("voice-toggle").checked = config.voice;
   $("voiceLeadMs").disabled = !config.voice;
   $("timeline").hidden = !config.timeline;
@@ -90,6 +89,8 @@ function render(s) {
   $("playhead").style.left = `${Math.min(100, (s.elapsedMs / 2210) * 100)}%`;
   $("preview").textContent =
     s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
+  $("move").textContent = s.moving ? "Done moving" : "Move overlay";
+  $("move").classList.toggle("active", s.moving);
   $("lock").disabled = !s.inputReady || saving || pending;
   let status = !native
     ? "Browser preview · global input unavailable"
@@ -97,15 +98,17 @@ function render(s) {
       ? "Input unavailable"
       : !s.armed
         ? "Paused · F9 to resume"
-        : s.editing
-          ? "Edit mode · position your overlay"
-          : !s.focused
-            ? "Waiting for Apex Legends"
-            : s.running
-              ? "Follow the highlighted arrow"
-              : s.held
-                ? "Pattern complete · release to reset"
-                : "Ready · hold left-click";
+        : s.moving
+          ? "Drag the overlay onto your crosshair"
+          : s.editing
+            ? "Edit mode · adjust your overlay"
+            : !s.focused
+              ? "Waiting for Apex Legends"
+              : s.running
+                ? "Follow the highlighted arrow"
+                : s.held
+                  ? "Pattern complete · release to reset"
+                  : "Ready · hold left-click";
   $("status").textContent = status;
   $("status-dot").classList.toggle("live", s.inputReady && s.armed);
   $("practice-status").textContent = !s.armed
@@ -159,9 +162,6 @@ $("voiceLeadMs").addEventListener("change", (e) =>
 $("timeline-toggle").addEventListener("change", (e) =>
   change("timeline", e.target.checked),
 );
-$("autoCenter-toggle").addEventListener("change", (e) =>
-  change("autoCenter", e.target.checked),
-);
 $("voice-toggle").addEventListener("change", (e) =>
   change("voice", e.target.checked),
 );
@@ -182,7 +182,16 @@ $("lock").onclick = async () => {
     error(e);
   }
 };
-$("center").onclick = () => api.CenterWindow().catch(error);
+$("move").onclick = async () => {
+  try {
+    await flushSettings();
+    render(await api.ToggleMove());
+  } catch (e) {
+    error(e);
+  }
+};
+$("centerOverlay").onclick = () =>
+  api.CenterOverlay().then(render).catch(error);
 $("quit").onclick = () => api.Quit().catch(error);
 document.addEventListener("keydown", (e) => {
   if (e.code === "Escape" && state?.preview) api.StopPreview().catch(error);

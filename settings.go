@@ -11,7 +11,8 @@ type Settings struct {
 	ArrowSize      int  `json:"arrowSize"`
 	Opacity        int  `json:"opacity"`
 	Timeline       bool `json:"timeline"`
-	AutoCenter     bool `json:"autoCenter"`
+	OffsetX        int  `json:"offsetX"`
+	OffsetY        int  `json:"offsetY"`
 	TimelineOffset int  `json:"timelineOffset"`
 	Voice          bool `json:"voice"`
 	VoiceLeadMS    int  `json:"voiceLeadMs"`
@@ -23,7 +24,7 @@ type Settings struct {
 }
 
 func defaultSettings() Settings {
-	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Timeline: true, AutoCenter: true, TimelineOffset: 32, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
+	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Timeline: true, TimelineOffset: 32, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -39,6 +40,8 @@ func (s Settings) normalized() Settings {
 	s.ArrowSize = clamp(s.ArrowSize, 24, 72)
 	s.Opacity = clamp(s.Opacity, 20, 100)
 	s.TimelineOffset = clamp(s.TimelineOffset, 12, 100)
+	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
+	s.OffsetY = clamp(s.OffsetY, -10000, 10000)
 	s.VoiceLeadMS = clamp(s.VoiceLeadMS, 0, 350)
 	s.Width = clamp(s.Width, 520, 1400)
 	s.Height = clamp(s.Height, 560, 1000)

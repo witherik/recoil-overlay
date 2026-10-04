@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -62,6 +63,7 @@ type inputEvent struct {
 	At     time.Time
 	Apex   bool
 	Detail string
+	X, Y   int
 }
 type nativeInput struct {
 	threadID uint32
@@ -98,13 +100,6 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 			return
 		}
 		defer destroyWindow.Call(hwnd)
-		overlay, err := createPracticeWindow()
-		if err != nil {
-			ready <- err
-			return
-		}
-		practiceWindow = overlay
-		defer destroyWindow.Call(overlay)
 		device := rawDevice{Page: 1, Usage: 2, Flags: 0x100, Target: hwnd} // background mouse only, no suppression
 		ok, _, err := registerRaw.Call(uintptr(unsafe.Pointer(&device)), 1, unsafe.Sizeof(device))
 		if ok == 0 {
@@ -187,7 +182,7 @@ func titleOf(hwnd uintptr) string {
 func apexForeground() bool {
 	hwnd, _, _ := foregroundWindow.Call()
 	title := titleOf(hwnd)
-	return title == "Apex Legends" || title == "Apex Legends™"
+	return title == "Apex Legends" || title == "Apex Legendsâ„¢"
 }
 func ownWindow() uintptr {
 	var found uintptr
@@ -206,10 +201,65 @@ func ownWindow() uintptr {
 
 // The Wails window is created with WS_EX_NOREDIRECTIONBITMAP (transparent
 // WebView), which can neither be removed nor combined with WS_EX_LAYERED. So
-// practice mode hides it and shows a native layered twin over the same rect.
+// the arrows live in a separate native layered window with its own position.
 var mainWindow, practiceWindow uintptr
 var practiceRect struct{ Left, Top, Right, Bottom int32 }
+var practiceBase point // top-left of the overlay when its offset is zero
 var practiceDPI uintptr
+var practicePlaced bool
+
+const (
+	overlayHidden = iota
+	overlayPractice
+	overlayMove
+)
+
+// Move mode: the overlay accepts the mouse and follows it while the left
+// button is held. Tracked by hand; the system's caption drag does not start on
+// this caption-less layered window.
+var overlayMovable atomic.Bool
+var overlayMoved func(offsetX, offsetY int)
+var overlayDragging bool
+var overlayGrab point // cursor position inside the window at button-down
+var overlayProc = windows.NewCallback(func(hwnd, msg, wparam, lparam uintptr) uintptr {
+	if overlayMovable.Load() || overlayDragging {
+		var cursor point
+		var rect struct{ Left, Top, Right, Bottom int32 }
+		switch msg {
+		case 0x0084: // WM_NCHITTEST
+			return 1 // HTCLIENT, so button messages arrive here
+		case 0x0021: // WM_MOUSEACTIVATE
+			return 3 // MA_NOACTIVATE
+		case 0x0201: // WM_LBUTTONDOWN
+			user32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&cursor)))
+			user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+			overlayGrab = point{cursor.X - rect.Left, cursor.Y - rect.Top}
+			overlayDragging = true
+			user32.NewProc("SetCapture").Call(hwnd)
+			return 0
+		case 0x0200: // WM_MOUSEMOVE
+			if overlayDragging {
+				user32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&cursor)))
+				setWindowPos.Call(hwnd, 0, uintptr(cursor.X-overlayGrab.X), uintptr(cursor.Y-overlayGrab.Y), 0, 0, 0x0001|0x0004|0x0010)
+				return 0
+			}
+		case 0x0202, 0x0215: // WM_LBUTTONUP, WM_CAPTURECHANGED
+			if overlayDragging {
+				overlayDragging = false
+				if msg == 0x0202 {
+					user32.NewProc("ReleaseCapture").Call()
+				}
+				user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+				if overlayMoved != nil {
+					overlayMoved(int(rect.Left-practiceBase.X), int(rect.Top-practiceBase.Y))
+				}
+				return 0
+			}
+		}
+	}
+	result, _, _ := user32.NewProc("DefWindowProcW").Call(hwnd, msg, wparam, lparam)
+	return result
+})
 
 // Must be called on a thread that keeps pumping messages (or owns the window).
 func createPracticeWindow() (uintptr, error) {
@@ -219,13 +269,39 @@ func createPracticeWindow() (uintptr, error) {
 	if hwnd == 0 {
 		return 0, fmt.Errorf("create practice overlay: %w", err)
 	}
+	setWindowLong.Call(hwnd, ^uintptr(3), overlayProc) // GWLP_WNDPROC
 	return hwnd, nil
+}
+
+// The overlay gets its own thread so dragging it (a modal loop inside the
+// window procedure) never stalls the Raw Input listener.
+func startOverlayWindow() error {
+	ready := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		hwnd, err := createPracticeWindow()
+		if err != nil {
+			ready <- err
+			return
+		}
+		practiceWindow = hwnd
+		ready <- nil
+		var msg winMessage
+		for {
+			result, _, _ := getMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+			if int32(result) <= 0 {
+				return
+			}
+			dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		}
+	}()
+	return <-ready
 }
 
 // Screen position of the crosshair: the middle of Apex's client area, or of the
 // monitor holding our window when the game isn't running.
 func crosshairPoint() (int32, int32) {
-	for _, name := range []string{"Apex Legends", "Apex Legends™"} {
+	for _, name := range []string{"Apex Legends", "Apex Legendsâ„¢"} {
 		title, _ := windows.UTF16PtrFromString(name)
 		hwnd, _, _ := user32.NewProc("FindWindowW").Call(0, uintptr(unsafe.Pointer(title)))
 		if minimized, _, _ := user32.NewProc("IsIconic").Call(hwnd); hwnd == 0 || minimized != 0 {
@@ -249,27 +325,31 @@ func crosshairPoint() (int32, int32) {
 	return (info.Monitor.Left + info.Monitor.Right) / 2, (info.Monitor.Top + info.Monitor.Bottom) / 2
 }
 
-// Moves the main window so the midpoint between the arrows lands on the
-// crosshair. Twice, because crossing monitors can change the DPI and size.
-func centerOnCrosshair() {
-	x, y := crosshairPoint()
-	for i := 0; i < 2; i++ {
-		var rect struct{ Left, Top, Right, Bottom int32 }
-		user32.NewProc("GetWindowRect").Call(mainWindow, uintptr(unsafe.Pointer(&rect)))
-		dpi, _, _ := user32.NewProc("GetDpiForWindow").Call(mainWindow)
-		if dpi == 0 {
-			dpi = 96
-		}
-		left := x - (rect.Right-rect.Left)/2
-		top := y - int32(math.Round(arrowAnchorY*float64(dpi)/96))
-		if left == rect.Left && top == rect.Top {
-			return
-		}
-		setWindowPos.Call(mainWindow, 0, uintptr(left), uintptr(top), 0, 0, 0x0001|0x0004|0x0010)
+// Puts the midpoint between the arrows on the crosshair, shifted by the user's
+// saved offset. An offset that would leave the desktop is ignored.
+func placeOverlay(s Settings) {
+	practiceDPI, _, _ = user32.NewProc("GetDpiForWindow").Call(mainWindow)
+	if practiceDPI == 0 {
+		practiceDPI = 96
 	}
+	scale := float64(practiceDPI) / 96
+	width, height := overlaySize(s, scale)
+	x, y := crosshairPoint()
+	practiceBase = point{x - width/2, y - int32(math.Round(arrowAnchorY*scale))}
+	left, top := practiceBase.X+int32(s.OffsetX), practiceBase.Y+int32(s.OffsetY)
+	metric := user32.NewProc("GetSystemMetrics")
+	screenLeft, _, _ := metric.Call(76)
+	screenTop, _, _ := metric.Call(77)
+	screenWidth, _, _ := metric.Call(78)
+	screenHeight, _, _ := metric.Call(79)
+	if left+width <= int32(screenLeft) || top+height <= int32(screenTop) || left >= int32(screenLeft)+int32(screenWidth) || top >= int32(screenTop)+int32(screenHeight) {
+		left, top = practiceBase.X, practiceBase.Y
+	}
+	practiceRect.Left, practiceRect.Top, practiceRect.Right, practiceRect.Bottom = left, top, left+width, top+height
+	practicePlaced, practiceFrameValid = false, false
 }
 
-func setPracticeWindow(practice, center bool) error {
+func setOverlayMode(mode int, s Settings) error {
 	if mainWindow == 0 {
 		mainWindow = ownWindow()
 		if mainWindow == 0 {
@@ -279,8 +359,8 @@ func setPracticeWindow(practice, center bool) error {
 	showWindow := user32.NewProc("ShowWindow")
 	// Async for the Wails window: its UI thread may be waiting on our lock.
 	showAsync := user32.NewProc("ShowWindowAsync")
-	practiceFrameValid = false
-	if !practice {
+	overlayMovable.Store(mode == overlayMove)
+	if mode == overlayHidden {
 		showWindow.Call(practiceWindow, 0)
 		showAsync.Call(mainWindow, 5)
 		return nil
@@ -288,13 +368,20 @@ func setPracticeWindow(practice, center bool) error {
 	if practiceWindow == 0 {
 		return fmt.Errorf("practice overlay unavailable")
 	}
-	if center {
-		centerOnCrosshair()
+	placeOverlay(s)
+	extended, _, _ := getWindowLong.Call(practiceWindow, ^uintptr(19))
+	if mode == overlayPractice {
+		extended |= 0x20 | 0x08000000 // click-through, never focused
+	} else {
+		extended &^= 0x20 | 0x08000000
 	}
-	user32.NewProc("GetWindowRect").Call(mainWindow, uintptr(unsafe.Pointer(&practiceRect)))
-	practiceDPI, _, _ = user32.NewProc("GetDpiForWindow").Call(mainWindow)
+	setWindowLong.Call(practiceWindow, ^uintptr(19), extended)
 	showWindow.Call(practiceWindow, 4) // SW_SHOWNOACTIVATE; invisible until the first frame
-	showAsync.Call(mainWindow, 0)
+	// Above the settings panel too, so the overlay is never hidden behind it.
+	setWindowPos.Call(practiceWindow, ^uintptr(0), 0, 0, 0, 0, 0x0001|0x0002|0x0010)
+	if mode == overlayPractice {
+		showAsync.Call(mainWindow, 0)
+	}
 	return nil
 }
 func restorePosition(ctx context.Context, x, y int) {

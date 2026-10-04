@@ -5,8 +5,9 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 ## Overlay and input
 
 - [ ] Open Apex Legends in borderless windowed mode and launch Recoil Practice.
-- [ ] In edit mode, place the arrows around the intended crosshair alignment point. Resize and move the settings window, then check arrow spacing, size, opacity, and timeline settings.
-- [ ] Press F8 to enter practice mode. Confirm the window becomes click-through and stays above the game, and that the arrows remain aligned with the same screen point.
+- [ ] In edit mode, check arrow spacing, size, opacity, and timeline settings.
+- [ ] Click **Move overlay**, drag the overlay by its backdrop, and click **Done moving**. Enter practice mode and confirm it appears where you left it. Click **Center** and confirm it returns to the crosshair.
+- [ ] Press F8 to enter practice mode. Confirm the settings window hides, the overlay is click-through and stays above the game, and the arrows sit either side of the crosshair.
 - [ ] With Apex Legends in the foreground, hold left-click. Confirm the right arrow starts immediately, the left arrow begins at 800 ms, and the right arrow returns at 1,330 ms.
 - [ ] Release left-click during a run. Confirm the timeline resets and later phases do not appear after release.
 - [ ] Hold left-click through the full 2,210 ms pattern. Confirm the progress stays at the end, the active arrow turns off, and it does not loop. Release and click again to start a new run.

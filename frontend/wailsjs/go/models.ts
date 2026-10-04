@@ -5,7 +5,8 @@ export namespace main {
 	    arrowSize: number;
 	    opacity: number;
 	    timeline: boolean;
-	    autoCenter: boolean;
+	    offsetX: number;
+	    offsetY: number;
 	    timelineOffset: number;
 	    voice: boolean;
 	    voiceLeadMs: number;
@@ -25,7 +26,8 @@ export namespace main {
 	        this.arrowSize = source["arrowSize"];
 	        this.opacity = source["opacity"];
 	        this.timeline = source["timeline"];
-	        this.autoCenter = source["autoCenter"];
+	        this.offsetX = source["offsetX"];
+	        this.offsetY = source["offsetY"];
 	        this.timelineOffset = source["timelineOffset"];
 	        this.voice = source["voice"];
 	        this.voiceLeadMs = source["voiceLeadMs"];
@@ -45,6 +47,7 @@ export namespace main {
 	    inputReady: boolean;
 	    running: boolean;
 	    preview: boolean;
+	    moving: boolean;
 	    held: boolean;
 	    elapsedMs: number;
 	    totalMs: number;
@@ -67,6 +70,7 @@ export namespace main {
 	        this.inputReady = source["inputReady"];
 	        this.running = source["running"];
 	        this.preview = source["preview"];
+	        this.moving = source["moving"];
 	        this.held = source["held"];
 	        this.elapsedMs = source["elapsedMs"];
 	        this.totalMs = source["totalMs"];

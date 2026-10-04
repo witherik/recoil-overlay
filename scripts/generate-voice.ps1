@@ -1,5 +1,10 @@
 param(
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\assets\voice')
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\assets\voice'),
+    # SAPI speaking rate, -10..10. Higher is shorter without raising the pitch.
+    [int]$Rate = 10,
+    # Silence kept before the first and after the last audible sample.
+    [double]$LeadMs = 1,
+    [double]$TailMs = 10
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,7 +16,7 @@ if (-not (Test-Path -LiteralPath $OutputDirectory)) {
 
 $synth = [System.Speech.Synthesis.SpeechSynthesizer]::new()
 try {
-    $synth.Rate = 3
+    $synth.Rate = $Rate
     $synth.Volume = 100
     $voices = @($synth.GetInstalledVoices() | Where-Object {
         $_.Enabled -and $_.VoiceInfo.Culture.Name -eq 'en-US'
@@ -66,9 +71,15 @@ try {
             }
 
             $samples = [int]($dataLength / 2)
+            $peak = 1
+            for ($index = 0; $index -lt $samples; $index++) {
+                $peak = [Math]::Max($peak, [Math]::Abs([int][BitConverter]::ToInt16($wave, $dataOffset + 2 * $index)))
+            }
+            # Audible means at least 5% of the peak, so soft breath noise before
+            # and after the word does not count towards its length.
             $first = 0
             $last = $samples - 1
-            $threshold = 350
+            $threshold = $peak * 0.05
             while ($first -lt $samples) {
                 $sample = [BitConverter]::ToInt16($wave, $dataOffset + 2 * $first)
                 if ([Math]::Abs([int]$sample) -ge $threshold) { break }
@@ -80,11 +91,25 @@ try {
                 $last--
             }
 
-            $leadingSamples = [int][Math]::Round($sampleRate * 0.010)
-            $trailingSamples = [int][Math]::Round($sampleRate * 0.030)
+            $leadingSamples = [int][Math]::Round($sampleRate * $LeadMs / 1000)
+            $trailingSamples = [int][Math]::Round($sampleRate * $TailMs / 1000)
             $start = [Math]::Max(0, $first - $leadingSamples)
             $end = [Math]::Min($samples - 1, $last + $trailingSamples)
-            $trimmedLength = ($end - $start + 1) * 2
+            $count = $end - $start + 1
+            $trimmedLength = $count * 2
+
+            # Normalise to 90% of full scale, with short fades so the hard trim
+            # does not click.
+            $gain = 0.9 * 32767 / $peak
+            $fadeIn = [Math]::Max(1, $leadingSamples)
+            $fadeOut = [Math]::Max(1, $trailingSamples)
+            $pcm = [byte[]]::new($trimmedLength)
+            for ($index = 0; $index -lt $count; $index++) {
+                $value = [BitConverter]::ToInt16($wave, $dataOffset + 2 * ($start + $index)) * $gain
+                $value *= [Math]::Min(1, ($index + 1) / $fadeIn)
+                $value *= [Math]::Min(1, ($count - $index) / $fadeOut)
+                [BitConverter]::GetBytes([int16][Math]::Round($value)).CopyTo($pcm, 2 * $index)
+            }
 
             $output = [System.IO.MemoryStream]::new()
             $writer = [System.IO.BinaryWriter]::new($output)
@@ -102,7 +127,7 @@ try {
                 $writer.Write([int16]16)
                 $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
                 $writer.Write([int]$trimmedLength)
-                $writer.Write($wave, $dataOffset + 2 * $start, $trimmedLength)
+                $writer.Write($pcm)
                 $writer.Flush()
                 [System.IO.File]::WriteAllBytes((Join-Path $OutputDirectory "$word.wav"), $output.ToArray())
             }

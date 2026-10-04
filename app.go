@@ -20,6 +20,7 @@ type Snapshot struct {
 	InputReady bool            `json:"inputReady"`
 	Running    bool            `json:"running"`
 	Preview    bool            `json:"preview"`
+	Moving     bool            `json:"moving"`
 	Held       bool            `json:"held"`
 	ElapsedMS  int64           `json:"elapsedMs"`
 	TotalMS    int             `json:"totalMs"`
@@ -37,6 +38,7 @@ type App struct {
 	stop                                                        chan struct{}
 	done                                                        chan struct{}
 	editing, armed, focused, inputReady, running, preview, held bool
+	moving                                                      bool
 	started                                                     time.Time
 	elapsed                                                     int64
 	runID                                                       uint64
@@ -59,7 +61,12 @@ func (a *App) ready(ctx context.Context) {
 	if s.Positioned {
 		restorePosition(ctx, s.X, s.Y)
 	}
-	in, err := startNativeInput(a.events)
+	overlayMoved = func(x, y int) { a.events <- inputEvent{Kind: "moved", X: x, Y: y} }
+	err := startOverlayWindow()
+	var in *nativeInput
+	if err == nil {
+		in, err = startNativeInput(a.events)
+	}
 	a.mu.Lock()
 	a.input = in
 	a.inputReady = err == nil
@@ -125,13 +132,18 @@ func (a *App) handleInputLocked(e inputEvent) {
 		if !a.preview {
 			a.cancelLocked()
 		}
+	case "moved":
+		if a.moving {
+			a.settings.OffsetX, a.settings.OffsetY = e.X, e.Y
+			a.saveLocked()
+		}
 	case "error":
 		a.err = e.Detail
 		a.inputReady = false
 		a.cancelLocked()
 		// A failed input thread must never strand the user behind a click-through window.
 		if !a.editing {
-			if err := setPracticeWindow(false, false); err == nil {
+			if err := setOverlayMode(overlayHidden, a.settings); err == nil {
 				a.editing = true
 			}
 		}
@@ -189,19 +201,19 @@ func (a *App) cancelLocked() {
 }
 func (a *App) snapshotLocked() Snapshot {
 	idx, dir, _ := pattern.At(pattern.R301(), a.elapsed)
-	return Snapshot{Settings: a.settings, Phases: pattern.R301(), Editing: a.editing, Armed: a.armed, Focused: a.focused, InputReady: a.inputReady, Running: a.running, Preview: a.preview, Held: a.held, ElapsedMS: a.elapsed, TotalMS: pattern.TotalMS(pattern.R301()), Phase: idx, Direction: dir, RunID: a.runID, Error: a.err}
+	return Snapshot{Settings: a.settings, Phases: pattern.R301(), Editing: a.editing, Armed: a.armed, Focused: a.focused, InputReady: a.inputReady, Running: a.running, Preview: a.preview, Moving: a.moving, Held: a.held, ElapsedMS: a.elapsed, TotalMS: pattern.TotalMS(pattern.R301()), Phase: idx, Direction: dir, RunID: a.runID, Error: a.err}
 }
 func (a *App) emitLocked() {
-	if !a.editing {
+	if !a.editing || a.moving {
 		if err := renderPractice(a.snapshotLocked()); err != nil {
 			a.err = err.Error()
 			a.cancelLocked()
-			if restoreErr := setPracticeWindow(false, false); restoreErr == nil {
-				a.editing = true
+			if restoreErr := setOverlayMode(overlayHidden, a.settings); restoreErr == nil {
+				a.editing, a.moving = true, false
 			} else {
 				a.err += "; " + restoreErr.Error()
 			}
-		} else {
+		} else if !a.editing {
 			// The WebView is hidden in practice. Keep its bridge quiet; the native
 			// bitmap follows the Go clock even if background web rendering sleeps.
 			return
@@ -215,12 +227,16 @@ func (a *App) toggleLocked() {
 		return
 	}
 	editing := !a.editing
-	if err := setPracticeWindow(!editing, a.settings.AutoCenter); err != nil {
+	mode := overlayPractice
+	if editing {
+		mode = overlayHidden
+	}
+	if err := setOverlayMode(mode, a.settings); err != nil {
 		a.err = err.Error()
 		return
 	}
 	a.cancelLocked()
-	a.editing = editing
+	a.editing, a.moving = editing, false
 	if !editing {
 		a.captureGeometryLocked()
 	}
@@ -231,6 +247,48 @@ func (a *App) ToggleMode() Snapshot {
 	a.toggleLocked()
 	a.emitLocked()
 	return a.snapshotLocked()
+}
+
+// ToggleMove shows the overlay as a draggable window so it can be positioned.
+func (a *App) ToggleMove() Snapshot {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.editing {
+		mode := overlayMove
+		if a.moving {
+			mode = overlayHidden
+		}
+		if err := setOverlayMode(mode, a.settings); err != nil {
+			a.err = err.Error()
+		} else {
+			a.moving = !a.moving
+		}
+	}
+	a.emitLocked()
+	return a.snapshotLocked()
+}
+
+// CenterOverlay puts the overlay back on the crosshair.
+func (a *App) CenterOverlay() Snapshot {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.settings.OffsetX, a.settings.OffsetY = 0, 0
+	a.saveLocked()
+	a.replaceOverlayLocked()
+	a.emitLocked()
+	return a.snapshotLocked()
+}
+func (a *App) replaceOverlayLocked() {
+	if a.moving {
+		if err := setOverlayMode(overlayMove, a.settings); err != nil {
+			a.err = err.Error()
+		}
+	}
+}
+func (a *App) saveLocked() {
+	if err := writeSettings(a.settings); err != nil {
+		a.err = "Settings could not be saved: " + err.Error()
+	}
 }
 func (a *App) Preview() Snapshot {
 	a.mu.Lock()
@@ -252,6 +310,8 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	s.X = a.settings.X
 	s.Y = a.settings.Y
 	s.Positioned = a.settings.Positioned
+	s.OffsetX = a.settings.OffsetX
+	s.OffsetY = a.settings.OffsetY
 	s.Width = a.settings.Width
 	s.Height = a.settings.Height
 	a.settings = s.normalized()
@@ -259,6 +319,7 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	if err != nil {
 		a.err = "Settings could not be saved: " + err.Error()
 	}
+	a.replaceOverlayLocked() // its size follows the arrow and timeline settings
 	a.emitLocked()
 	return a.snapshotLocked(), err
 }
@@ -271,6 +332,5 @@ func (a *App) captureGeometryLocked() {
 	}
 }
 func (a *App) SavePosition()                        { a.mu.Lock(); defer a.mu.Unlock(); a.captureGeometryLocked() }
-func (a *App) CenterWindow()                        { wr.WindowCenter(a.ctx); a.SavePosition() }
 func (a *App) Quit()                                { a.SavePosition(); wr.Quit(a.ctx) }
 func (a *App) beforeClose(ctx context.Context) bool { a.SavePosition(); return false }

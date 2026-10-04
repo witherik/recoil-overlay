@@ -13,7 +13,6 @@ const mock = {
     arrowSize: 42,
     opacity: 90,
     timeline: true,
-    autoCenter: true,
     timelineOffset: 32,
     voice: true,
     voiceLeadMs: 150,
@@ -25,6 +24,7 @@ const mock = {
   inputReady: false,
   running: false,
   preview: false,
+  moving: false,
   held: false,
   elapsedMs: 0,
   totalMs: 2210,
@@ -106,7 +106,11 @@ const browserAPI = {
       "Open the Windows app to use global input and click-through mode.";
     return emit();
   },
-  CenterWindow: async () => {},
+  ToggleMove: async () => {
+    mock.moving = !mock.moving;
+    return emit();
+  },
+  CenterOverlay: async () => emit(),
   SavePosition: async () => {},
   Quit: async () => {},
 };

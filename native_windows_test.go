@@ -41,10 +41,14 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	mainWindow, practiceWindow = 0, overlay
 	defer func() { mainWindow, practiceWindow, practiceFrameValid = 0, 0, false }()
 	isVisible := user32.NewProc("IsWindowVisible")
-	if err := setPracticeWindow(true, true); err != nil {
-		t.Fatal(err)
+	windowRect := func() (rect struct{ Left, Top, Right, Bottom int32 }) {
+		user32.NewProc("GetWindowRect").Call(overlay, uintptr(unsafe.Pointer(&rect)))
+		return
 	}
 	s := Snapshot{Settings: defaultSettings(), Armed: true, Direction: "right"}
+	if err := setOverlayMode(overlayPractice, s.Settings); err != nil {
+		t.Fatal(err)
+	}
 	if err := renderPractice(s); err != nil {
 		t.Fatal(err)
 	}
@@ -52,16 +56,31 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	if style&(0x80000|0x20|0x08000000) != (0x80000 | 0x20 | 0x08000000) {
 		t.Fatal("missing layered/click-through/noactivate flags")
 	}
-	var rect struct{ Left, Top, Right, Bottom int32 }
-	user32.NewProc("GetWindowRect").Call(overlay, uintptr(unsafe.Pointer(&rect)))
-	if visible, _, _ := isVisible.Call(overlay); visible == 0 || rect != practiceRect {
-		t.Fatalf("practice overlay not shown over the main window: %+v, want %+v", rect, practiceRect)
+	centred := windowRect()
+	if visible, _, _ := isVisible.Call(overlay); visible == 0 || centred != practiceRect {
+		t.Fatalf("practice overlay not shown: %+v, want %+v", centred, practiceRect)
 	}
 	x, y := crosshairPoint()
-	if rect.Left+(rect.Right-rect.Left)/2 != x || rect.Top+int32(arrowAnchorY*float64(practiceDPI)/96+.5) != y {
-		t.Fatalf("arrows not centred on crosshair (%d,%d): %+v at %d dpi", x, y, rect, practiceDPI)
+	if centred.Left+(centred.Right-centred.Left)/2 != x || centred.Top+int32(arrowAnchorY*float64(practiceDPI)/96+.5) != y {
+		t.Fatalf("arrows not centred on crosshair (%d,%d): %+v at %d dpi", x, y, centred, practiceDPI)
 	}
-	if err := setPracticeWindow(false, false); err != nil {
+	// Move mode takes the mouse and honours the saved offset.
+	s.Moving, s.Settings.OffsetX, s.Settings.OffsetY = true, 30, -20
+	if err := setOverlayMode(overlayMove, s.Settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderPractice(s); err != nil {
+		t.Fatal(err)
+	}
+	style, _, _ = getWindowLong.Call(overlay, ^uintptr(19))
+	if moved := windowRect(); style&0x20 != 0 || moved.Left != centred.Left+30 || moved.Top != centred.Top-20 {
+		t.Fatalf("move mode: style %#x, rect %+v", style, moved)
+	}
+	hit, _, _ := user32.NewProc("SendMessageW").Call(overlay, 0x0084, 0, 0)
+	if hit != 1 {
+		t.Fatalf("move mode hit test = %d, want client", hit)
+	}
+	if err := setOverlayMode(overlayHidden, s.Settings); err != nil {
 		t.Fatal(err)
 	}
 	if visible, _, _ := isVisible.Call(overlay); visible != 0 {

@@ -156,10 +156,15 @@ button:hover {
 .arrow {
   width: var(--arrow-size);
   height: var(--arrow-size);
-  color: #526569;
+  color: #96a8ac;
+  opacity: 0.16;
   transition:
     color 45ms linear,
+    opacity 45ms linear,
     filter 45ms linear;
+}
+.arrow.active {
+  opacity: 1;
 }
 .arrow svg {
   width: 100%;
@@ -364,6 +369,18 @@ button:hover {
 }
 .lead-label > span {
   color: #7e999e;
+}
+.position-actions {
+  display: flex;
+  gap: 6px;
+}
+.mini {
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.mini.active {
+  border-color: var(--mint);
+  color: var(--mint);
 }
 .actions {
   display: flex;

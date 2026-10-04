@@ -20,13 +20,16 @@ import (
 
 // Practice draws a premultiplied alpha bitmap into a native layered window
 // placed exactly over the (hidden) Wails window; the OS then handles true
-// click-through. See setPracticeWindow for why the Wails window can't be used.
+// click-through. See setOverlayMode for why the Wails window can't be used.
 var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
 var overlayFont, _ = opentype.Parse(goregular.TTF)
 
 // Vertical midpoint of the arrows, in unscaled pixels from the window top. The
 // frontend stage uses the same anchor.
 const arrowAnchorY = 142.0
+
+// Opacity of the arrow that is not currently called for (the frontend matches).
+const inactiveArrowAlpha = 40
 
 var practiceFrameValid bool
 var lastPracticeFrame frameKey
@@ -37,7 +40,7 @@ type frameKey struct {
 	DPI               uint32
 	Elapsed           int64
 	Direction, Status string
-	Armed             bool
+	Armed, Moving     bool
 }
 type point struct{ X, Y int32 }
 type bitmapHeader struct {
@@ -54,7 +57,19 @@ type bitmapInfo struct {
 }
 type blendFunction struct{ Operation, Flags, Alpha, Format byte }
 
+// Pixel size of the overlay window: just large enough for what is drawn.
+func overlaySize(s Settings, scale float64) (int32, int32) {
+	height := arrowAnchorY + float64(s.ArrowSize)/2 + 12
+	if s.Timeline {
+		height += float64(s.TimelineOffset) + 79 - 4
+	}
+	return int32(math.Round(464 * scale)), int32(math.Round(height * scale))
+}
+
 func practiceStatus(s Snapshot) string {
+	if s.Moving {
+		return "DRAG TO POSITION"
+	}
 	if !s.Armed {
 		return "DISABLED  /  F9 TO ENABLE"
 	}
@@ -81,7 +96,7 @@ func renderPractice(s Snapshot) error {
 	if dpi == 0 {
 		dpi = 96
 	}
-	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed}
+	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving}
 	if practiceFrameValid && key == lastPracticeFrame {
 		return nil
 	}
@@ -110,14 +125,18 @@ func renderPractice(s Snapshot) error {
 	}
 	size := point{int32(width), int32(height)}
 	origin := point{}
-	position := point{rect.Left, rect.Top}
+	// Only place the window once per mode change, so a drag is never undone.
+	var position unsafe.Pointer
+	if !practicePlaced {
+		position = unsafe.Pointer(&point{rect.Left, rect.Top})
+	}
 	blend := blendFunction{Alpha: byte(s.Settings.Opacity * 255 / 100), Format: 1}
-	ok, _, err := user32.NewProc("UpdateLayeredWindow").Call(practiceWindow, 0, uintptr(unsafe.Pointer(&position)), uintptr(unsafe.Pointer(&size)), dc, uintptr(unsafe.Pointer(&origin)), 0, uintptr(unsafe.Pointer(&blend)), 2)
+	ok, _, err := user32.NewProc("UpdateLayeredWindow").Call(practiceWindow, 0, uintptr(position), uintptr(unsafe.Pointer(&size)), dc, uintptr(unsafe.Pointer(&origin)), 0, uintptr(unsafe.Pointer(&blend)), 2)
 	if ok == 0 {
 		return fmt.Errorf("paint transparent overlay: %w", err)
 	}
 	lastPracticeFrame = key
-	practiceFrameValid = true
+	practiceFrameValid, practicePlaced = true, true
 	return nil
 }
 
@@ -167,9 +186,11 @@ func (c canvas) line(x1, y1, x2, y2, width float64, col color.NRGBA) {
 			distance := math.Hypot(float64(x)+.5-x1-t*dx, float64(y)+.5-y1-t*dy)
 			coverage := math.Max(0, math.Min(1, r+.5-distance))
 			if coverage > 0 {
-				a := uint8(float64(col.A) * coverage)
-				p := color.NRGBA{col.R, col.G, col.B, a}
-				c.image.Set(x, y, p)
+				// Source-over onto the premultiplied canvas.
+				a := float64(col.A) * coverage / 255
+				d := c.image.RGBAAt(x, y)
+				mix := func(src, dst uint8) uint8 { return uint8(float64(src)*a + float64(dst)*(1-a) + .5) }
+				c.image.SetRGBA(x, y, color.RGBA{mix(col.R, d.R), mix(col.G, d.G), mix(col.B, d.B), uint8(255*a + float64(d.A)*(1-a) + .5)})
 			}
 		}
 	}
@@ -180,11 +201,19 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	center := float64(width) / scale / 2
 	mint := color.NRGBA{112, 227, 192, 255}
 	coral := color.NRGBA{244, 161, 140, 255}
-	muted := color.NRGBA{82, 101, 105, 230}
+	muted := color.NRGBA{150, 168, 172, 255}
 	text := color.NRGBA{220, 232, 233, 255}
 	dim := color.NRGBA{139, 161, 164, 255}
 	size := float64(s.Settings.ArrowSize)
 	gap := float64(s.Settings.Gap)
+	if s.Moving {
+		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
+		w, h := float64(width)/scale, float64(height)/scale
+		c.rect(0, 0, w, h, mint)
+		c.rect(1, 1, w-2, h-2, color.NRGBA{10, 17, 27, 150})
+		c.line(center-9, arrowAnchorY, center+9, arrowAnchorY, 1.5, text)
+		c.line(center, arrowAnchorY-9, center, arrowAnchorY+9, 1.5, text)
+	}
 	for _, direction := range []string{"left", "right"} {
 		x := center - (gap+size)/2
 		if direction == "right" {
@@ -204,12 +233,23 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		if direction == "right" {
 			coords = [][4]float64{{27, 12, 47, 32}, {47, 32, 27, 52}, {46, 32, 12, 32}}
 		}
-		for _, l := range coords {
-			c.line(px(l[0]), py(l[1])+1, px(l[2]), py(l[3])+1, 9*size/64, color.NRGBA{0, 0, 0, 170})
+		if col != muted {
+			for _, l := range coords {
+				c.line(px(l[0]), py(l[1])+1, px(l[2]), py(l[3])+1, 9*size/64, color.NRGBA{0, 0, 0, 170})
+			}
+			for _, l := range coords {
+				c.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
+			}
+			continue
 		}
+		// The waiting arrow is only a faint hint. Draw it opaque on a scratch
+		// layer first so its overlapping strokes do not add up at the joints.
+		layer := canvas{image.NewRGBA(img.Bounds()), scale}
 		for _, l := range coords {
-			c.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
+			layer.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
 		}
+		box := image.Rect(int((x-size)*scale), int((arrowAnchorY-size)*scale), int((x+size)*scale), int((arrowAnchorY+size)*scale))
+		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
 	}
 	c.centeredText(center, 61, 9, practiceStatus(s), color.NRGBA{183, 196, 200, 210})
 	if s.Settings.Timeline {
