@@ -6,7 +6,6 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
@@ -19,28 +18,31 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "superglide-overlay",
-		Width:  300,
-		Height: 175,
+		Title:     windowTitle,
+		Width:     620,
+		Height:    600,
+		MinWidth:  520,
+		MinHeight: 560,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 175},
-		OnStartup:        app.startup,
+		BackgroundColour:   &options.RGBA{R: 0, G: 0, B: 0, A: 0},
+		OnStartup:          app.startup,
+		OnDomReady:         app.ready,
+		OnShutdown:         app.shutdown,
+		OnBeforeClose:      app.beforeClose,
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "4a162763-cda7-4354-aea4-62cf92b5591d"},
 		Bind: []interface{}{
 			app,
 		},
-		DisableResize: true,
+		DisableResize: false,
 		Frameless:     true, // only false for debugging
 		AlwaysOnTop:   true,
 		Windows: &windows.Options{
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-			Theme:                windows.Dark,
-		},
-		Mac: &mac.Options{
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
+			DisableFramelessWindowDecorations: true,
+			WebviewIsTransparent:              true,
+			WindowIsTranslucent:               true,
+			Theme:                             windows.Dark,
 		},
 	})
 

@@ -1,169 +1,191 @@
-import './style.css';
-import './app.css';
-
-import { EventsOn } from "../wailsjs/runtime/runtime";
-import { UpdateSettings } from '../wailsjs/go/main/App';
-import { GetSettings } from '../wailsjs/go/main/App';
-import { LogPrint } from '../wailsjs/runtime/runtime';
-
-const vkMap = {
-  8: "Backspace",
-  9: "Tab",
-  13: "Enter",
-  16: "Shift",
-  17: "Ctrl",
-  162: "Ctrl", // do not now why but this is for some people ctrl 
-  18: "Alt",
-  19: "Pause",
-  20: "CapsLock",
-  27: "Escape",
-  32: "Space",
-  33: "PageUp",
-  34: "PageDown",
-  35: "End",
-  36: "Home",
-  37: "Left",
-  38: "Up",
-  39: "Right",
-  40: "Down",
-  45: "Insert",
-  46: "Delete",
-  7864320: "Mousewheel DOWN",
-  4287102976: "Mousewheel UP",
-  // 48–90 = 0-9, A-Z
-};
-
-for (let i = 48; i <= 90; i++) {
-  vkMap[i] = String.fromCharCode(i); // 0-9, A-Z
-}  
-
-document.querySelector('#app').innerHTML = `
-  <div class="topnav">
-    <a id="nav-home" class="nav-item active" href="#home">Home</a>
-    <a id="nav-settings" class="nav-item" href="#settings">Settings</a>
-  </div>
-
-  <div id="page-home" class="page">
-    <div class="results-container" id="resultsContainer"></div>
-  </div>
-
-  <div id="page-settings" class="page hidden">
-    <div class="column-container">
-    <div class="row">      
-      <p>FPS:</p>
-      <input id="fpsInput" class="input" type="number" min="1" />
-    </div>
-    <div class="row">
-      <p>Jump Key:</p>
-      <button id="jumpButton" class="button setting-button is-link is-outlined">
-        SPACE&nbsp;&nbsp;<span class="icon"><i class="fas fa-keyboard"></i></span>
-      </button>
-    </div>
-    <div class="row">
-      <p>Crouch Key:</p>
-      <button id="crouchButton" class="button">C</button>
-    </div>
-
-  </div>
+import "./style.css";
+import { api, native, onState } from "./bridge";
+document.querySelector("#app").innerHTML = `
+ <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="center" title="Center window">⌖</button><button id="quit" title="Close application">×</button></div></header>
+ <main>
+  <section class="stage" aria-label="Strafe guidance">
+   <div class="alignment"><span></span><small>ALIGN WITH YOUR CROSSHAIR</small><span></span></div>
+   <div class="arrows"><div id="left" class="arrow left" aria-label="Strafe left"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 12 17 32l20 20M18 32h34"/></svg></div><div class="crosshair-guide" aria-hidden="true">+</div><div id="right" class="arrow right" aria-label="Strafe right"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="m27 12 20 20-20 20M46 32H12"/></svg></div></div>
+   <div id="timeline" class="timeline"><div class="timeline-top"><span>R-301 <small>EXPECTED STRAFE</small></span><span id="elapsed">0.00 / 2.21 s</span></div><div class="track"><div class="segment right-segment" style="flex:800"><span>R <small>800 ms</small></span></div><div class="segment left-segment" style="flex:530"><span>L <small>530 ms</small></span></div><div class="segment right-segment" style="flex:880"><span>R <small>880 ms</small></span></div><div id="playhead"></div></div><div class="ticks"><span>0</span><span>0.80</span><span>1.33</span><span>2.21 s</span></div></div>
+  </section>
+  <section class="controls">
+   <div class="section-heading"><span>OVERLAY SETUP</span><span class="drag-hint">Drag the header · resize the window</span></div>
+   <div class="settings-grid">
+    <label>Arrow spacing <output id="gap-value"></output><input id="gap" type="range" min="40" max="300" step="2"></label>
+    <label>Arrow size <output id="arrowSize-value"></output><input id="arrowSize" type="range" min="24" max="72" step="2"></label>
+    <label>Opacity <output id="opacity-value"></output><input id="opacity" type="range" min="20" max="100"></label>
+    <label>Timeline spacing <output id="timelineOffset-value"></output><input id="timelineOffset" type="range" min="12" max="100" step="2"></label>
+   </div>
+   <div class="options-row"><label class="check"><input id="timeline-toggle" type="checkbox">Show timeline</label><label class="check" title="Snap the arrows to the middle of the Apex window when practice starts"><input id="autoCenter-toggle" type="checkbox">Auto-center</label><label class="check"><input id="voice-toggle" type="checkbox">Voice cues</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label></div>
+   <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd>F8</kbd></button></div>
+   <p class="helper">Hold left-click in Apex to begin. Release to reset.<br><kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable · then click again</p>
+   <p id="error" role="alert" hidden></p>
+  </section>
+ </main>
+ <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><span class="version">R-301 · v0.1</span></footer>
+ <div id="practice-status" class="practice-status"></div>
 `;
-
-const resultsContainer = document.getElementById("resultsContainer");
-resultsContainer.scrollTop = 0;
-
-// Nav click handlers
-document.getElementById("nav-home").onclick = () => updateActive(document.getElementById("nav-home"));
-document.getElementById("nav-settings").onclick = () => updateActive(document.getElementById("nav-settings"));
-
-EventsOn("superglideResult", (data) => {
-  const color = getColorFromChance(data.chancePercent);
-  const box = document.createElement("div");
-  box.classList.add("result-box");
-  box.style.backgroundColor = color;
-  box.innerHTML = `
-    <div class="result-chance">${data.chancePercent.toFixed(1)}%</div>
-    <div class="result-message">${data.message}</div>
-  `;
-  resultsContainer.prepend(box); 
-  resultsContainer.scrollTop = resultsContainer.scrollHeight;
-});
-
-EventsOn("updateInput", (data) => {
-  isUpdating = false; 
-  const jumpButton = document.getElementById("jumpButton");
-  const crouchButton = document.getElementById("crouchButton");
-
-  jumpButton.innerHTML = `${vkMap[data.jump]}&nbsp;&nbsp;<span class="icon"><i class="fas fa-keyboard"></i></span>`;
-  crouchButton.innerHTML = `${vkMap[data.crouch]}&nbsp;&nbsp;<span class="icon"><i class="fas fa-keyboard"></i></span>`;
-})
-
-// Style active tab underline
-function updateActive(tab) {
-  document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
-  tab.classList.add("active");
-  
-  document.getElementById("page-home").classList.add("hidden");
-  document.getElementById("page-settings").classList.add("hidden");
-  
-  const target = tab.getAttribute("href").replace("#", "page-");
-  document.getElementById(target).classList.remove("hidden");
-  const targetId = target;
-  if (targetId === "page-settings") {
-    setTimeout(getSettings, 50);
+const $ = (id) => document.getElementById(id);
+let state,
+  localSettings,
+  pending = false,
+  saving = false,
+  debounce,
+  savePromise;
+function error(err) {
+  $("error").hidden = false;
+  $("error").textContent = String(err);
+}
+function render(s) {
+  state = s;
+  if (!pending && !saving) localSettings = { ...s.settings };
+  const config = localSettings || s.settings;
+  document.body.classList.toggle("practice", !s.editing);
+  document.documentElement.style.setProperty("--gap", `${config.gap}px`);
+  document.documentElement.style.setProperty(
+    "--arrow-size",
+    `${config.arrowSize}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--overlay-opacity",
+    config.opacity / 100,
+  );
+  document.documentElement.style.setProperty(
+    "--timeline-offset",
+    `${config.timelineOffset}px`,
+  );
+  const controlsTop = Math.max(
+    275,
+    76 + 66 + config.arrowSize / 2 + config.timelineOffset + 100,
+  );
+  document.documentElement.style.setProperty(
+    "--controls-top",
+    `${controlsTop}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--content-height",
+    `${controlsTop + 270}px`,
+  );
+  for (const id of ["gap", "arrowSize", "opacity", "timelineOffset"]) {
+    if (document.activeElement !== $(id)) $(id).value = config[id];
+    $(`${id}-value`).textContent =
+      `${config[id]}${id === "opacity" ? "%" : " px"}`;
   }
+  if (document.activeElement !== $("voiceLeadMs"))
+    $("voiceLeadMs").value = config.voiceLeadMs;
+  $("timeline-toggle").checked = config.timeline;
+  $("autoCenter-toggle").checked = config.autoCenter;
+  $("voice-toggle").checked = config.voice;
+  $("voiceLeadMs").disabled = !config.voice;
+  $("timeline").hidden = !config.timeline;
+  $("left").classList.toggle(
+    "active",
+    s.direction === "left" && (s.armed || s.preview),
+  );
+  $("right").classList.toggle(
+    "active",
+    s.direction === "right" && (s.armed || s.preview),
+  );
+  $("elapsed").textContent = `${(s.elapsedMs / 1000).toFixed(2)} / 2.21 s`;
+  $("playhead").style.left = `${Math.min(100, (s.elapsedMs / 2210) * 100)}%`;
+  $("preview").textContent =
+    s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
+  $("lock").disabled = !s.inputReady || saving || pending;
+  let status = !native
+    ? "Browser preview · global input unavailable"
+    : !s.inputReady
+      ? "Input unavailable"
+      : !s.armed
+        ? "Paused · F9 to resume"
+        : s.editing
+          ? "Edit mode · position your overlay"
+          : !s.focused
+            ? "Waiting for Apex Legends"
+            : s.running
+              ? "Follow the highlighted arrow"
+              : s.held
+                ? "Pattern complete · release to reset"
+                : "Ready · hold left-click";
+  $("status").textContent = status;
+  $("status-dot").classList.toggle("live", s.inputReady && s.armed);
+  $("practice-status").textContent = !s.armed
+    ? "DISABLED · F9 TO ENABLE"
+    : !s.focused
+      ? "WAITING FOR APEX · F8 TO EDIT"
+      : s.held && !s.running
+        ? "RELEASE TO RESET"
+        : "F8 EDIT · F9 DISABLE";
+  $("error").hidden = !s.error;
+  if (s.error) $("error").textContent = s.error;
 }
-
-function getColorFromChance(chance) {
-  if (chance >= 95) return "rgba(0, 255, 0, 0.25)";         
-  if (chance >= 70) return "rgba(68, 255, 164, 0.25)";       
-  if (chance >= 50) return "rgba(68, 255, 164, 0.25)";
-  if (chance >= 30) return "rgba(255, 240, 0, 0.25)";       
-  return "rgba(255, 68, 68, 0.25)";                          
+async function flushSettings() {
+  clearTimeout(debounce);
+  if (savePromise) {
+    await savePromise;
+    return flushSettings();
+  }
+  if (!pending) return;
+  pending = false;
+  saving = true;
+  savePromise = api.UpdateSettings({ ...localSettings });
+  try {
+    const result = await savePromise;
+    saving = false;
+    render(result);
+  } catch (e) {
+    saving = false;
+    error(e);
+    throw e;
+  } finally {
+    savePromise = null;
+  }
+  if (pending) await flushSettings();
 }
-
-let jumpVKCode = null;
-let crouchVKCode = null;
-let fps = null;
-let isUpdating = false;
-
-document.getElementById("jumpButton").addEventListener("click", () => {
-  if (isUpdating) return;
-  isUpdating = true;
-
-  const button = document.getElementById("jumpButton");
-  button.textContent = "Press any key...";
-  button.blur();
-  updateSettings("jump", fps);
-});
-
-document.getElementById("crouchButton").addEventListener("click", () => {
-  if (isUpdating) return;
-  isUpdating = true;
-
-  const button = document.getElementById("crouchButton");
-  button.textContent = "Press any key...";
-  button.blur();
-  updateSettings("crouch", fps);
-  
-});
-
-document.getElementById("fpsInput").addEventListener("change", (event) => {
-  fps = parseInt(event.target.value, 10);
-  updateSettings("fps", fps);
-});
-
-function updateSettings(s, fps) {
-  UpdateSettings(s, fps).then(result =>{});
-} 
-
-function getSettings() {
-  GetSettings().then(settings => {
-    if (!settings) return;
-    
-    jumpVKCode = settings.jumpKey;
-    crouchVKCode = settings.crouchKey;
-
-    document.getElementById("jumpButton").innerHTML =`${vkMap[jumpVKCode] || "?"}&nbsp;&nbsp;<span class="icon"><i class="fas fa-keyboard"></i></span>`;
-    document.getElementById("crouchButton").innerHTML = `${vkMap[crouchVKCode] || "?"}&nbsp;&nbsp;<span class="icon"><i class="fas fa-keyboard"></i></span>`;
-    document.getElementById("fpsInput").value = settings.fps;
-  });
+function change(key, value) {
+  localSettings = { ...localSettings, [key]: value };
+  pending = true;
+  render(state);
+  clearTimeout(debounce);
+  debounce = setTimeout(() => flushSettings().catch(error), 180);
 }
+for (const key of ["gap", "arrowSize", "opacity", "timelineOffset"])
+  $(key).addEventListener("input", (e) => change(key, Number(e.target.value)));
+$("voiceLeadMs").addEventListener("change", (e) =>
+  change(
+    "voiceLeadMs",
+    Math.max(0, Math.min(350, Number(e.target.value) || 0)),
+  ),
+);
+$("timeline-toggle").addEventListener("change", (e) =>
+  change("timeline", e.target.checked),
+);
+$("autoCenter-toggle").addEventListener("change", (e) =>
+  change("autoCenter", e.target.checked),
+);
+$("voice-toggle").addEventListener("change", (e) =>
+  change("voice", e.target.checked),
+);
+$("preview").onclick = async () => {
+  try {
+    await flushSettings();
+    if (state.running && state.preview) await api.StopPreview();
+    else render(await api.Preview());
+  } catch (e) {
+    error(e);
+  }
+};
+$("lock").onclick = async () => {
+  try {
+    await flushSettings();
+    render(await api.ToggleMode());
+  } catch (e) {
+    error(e);
+  }
+};
+$("center").onclick = () => api.CenterWindow().catch(error);
+$("quit").onclick = () => api.Quit().catch(error);
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Escape" && state?.preview) api.StopPreview().catch(error);
+});
+onState(render);
+api.GetState().then(render).catch(error);
