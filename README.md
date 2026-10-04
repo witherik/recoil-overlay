@@ -28,7 +28,7 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
 - **F9** disables or enables practice input. Re-enabling requires a fresh click (release, then press).
 - The game must have the foreground title **Apex Legends** for a held click to start a run.
 - **Preview pattern** runs from edit mode without Apex Legends. Use it to inspect the arrows and timeline.
-- Optional voice cues are embedded in the app, so playback works offline. The clips are short so they fit before a direction change: `left` is about 77 ms and `right` about 95 ms, synthesized with Microsoft David Desktop at its fastest rate, trimmed to start within 1 ms and normalised in volume. Voice lead defaults to 150 ms and can be adjusted from 0 to 350 ms.
+- Optional voice cues are embedded in the app, so playback works offline. The clips are short so they fit before a direction change: each word starts within 1 ms and is effectively over by 75 ms. They are synthesized with Microsoft David Desktop at its fastest rate, trimmed, time-compressed where needed without changing pitch, and normalised in volume. Voice lead defaults to 75 ms, so a word finishes just as its direction change arrives, and can be adjusted from 0 to 350 ms.
 
 Arrow spacing, arrow size, opacity, arrow and timeline visibility, timeline placement, voice, and voice lead are editable in the Wails settings window. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control.
 

@@ -1,15 +1,29 @@
 package main
 
 import (
+	"os"
 	"recoil-overlay/internal/pattern"
 	"reflect"
 	"testing"
 	"time"
 )
 
+// Tests that save settings must never touch the user's real settings file.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "recoil-overlay-test")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("APPDATA", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 func testApp() (*App, *[]string) {
 	spoken := []string{}
 	a := &App{settings: defaultSettings(), armed: true, inputReady: true, speak: func(s string) { spoken = append(spoken, s) }, silence: func() {}}
+	a.settings.VoiceLeadMS = 150
 	return a, &spoken
 }
 func TestHoldReleaseCancelsFutureCues(t *testing.T) {

@@ -4,11 +4,52 @@ param(
     [int]$Rate = 10,
     # Silence kept before the first and after the last audible sample.
     [double]$LeadMs = 1,
-    [double]$TailMs = 10
+    [double]$TailMs = 10,
+    # Words still audible after this point are time-compressed to fit, keeping
+    # their pitch. 0 disables the limit.
+    [double]$MaxMs = 75
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
+# WSOLA time-scale modification: overlapping 20 ms windows are re-spaced to
+# shorten the clip, each one nudged to where it best continues the previous
+# one so the pitch is preserved.
+Add-Type @'
+using System;
+public static class TimeScale {
+    public static short[] Stretch(short[] input, double factor, int sampleRate) {
+        int window = sampleRate / 50, hop = window / 2, search = sampleRate / 250;
+        if (input.Length <= window) return input;
+        int length = (int)Math.Round(input.Length * factor);
+        double[] sum = new double[length + window], weight = new double[length + window];
+        int previous = 0;
+        for (int frame = 0; frame * hop < length; frame++) {
+            int ideal = Math.Min((int)(frame * hop / factor), input.Length - window), best = ideal;
+            int natural = previous + hop;
+            if (frame > 0 && natural + window <= input.Length) {
+                double bestScore = double.NegativeInfinity;
+                for (int shift = -search; shift <= search; shift++) {
+                    int candidate = ideal + shift;
+                    if (candidate < 0 || candidate + window > input.Length) continue;
+                    double score = 0;
+                    for (int i = 0; i < window; i++) score += (double)input[candidate + i] * input[natural + i];
+                    if (score > bestScore) { bestScore = score; best = candidate; }
+                }
+            }
+            for (int i = 0; i < window; i++) {
+                double hann = 0.5 - 0.5 * Math.Cos(2 * Math.PI * (i + 0.5) / window);
+                sum[frame * hop + i] += input[best + i] * hann;
+                weight[frame * hop + i] += hann;
+            }
+            previous = best;
+        }
+        short[] output = new short[length];
+        for (int i = 0; i < length; i++) output[i] = (short)Math.Round(weight[i] > 1e-3 ? sum[i] / weight[i] : 0);
+        return output;
+    }
+}
+'@
 
 if (-not (Test-Path -LiteralPath $OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
@@ -95,7 +136,17 @@ try {
             $trailingSamples = [int][Math]::Round($sampleRate * $TailMs / 1000)
             $start = [Math]::Max(0, $first - $leadingSamples)
             $end = [Math]::Min($samples - 1, $last + $trailingSamples)
-            $count = $end - $start + 1
+            $clip = [int16[]]::new($end - $start + 1)
+            for ($index = 0; $index -lt $clip.Length; $index++) {
+                $clip[$index] = [BitConverter]::ToInt16($wave, $dataOffset + 2 * ($start + $index))
+            }
+            $audibleMs = 1000.0 * ($last - $start + 1) / $sampleRate
+            if ($MaxMs -gt 0 -and $audibleMs -gt $MaxMs) {
+                $clip = [TimeScale]::Stretch($clip, ($MaxMs - 4) / $audibleMs, $sampleRate)
+                $peak = 1
+                foreach ($sample in $clip) { $peak = [Math]::Max($peak, [Math]::Abs([int]$sample)) }
+            }
+            $count = $clip.Length
             $trimmedLength = $count * 2
 
             # Normalise to 90% of full scale, with short fades so the hard trim
@@ -105,7 +156,7 @@ try {
             $fadeOut = [Math]::Max(1, $trailingSamples)
             $pcm = [byte[]]::new($trimmedLength)
             for ($index = 0; $index -lt $count; $index++) {
-                $value = [BitConverter]::ToInt16($wave, $dataOffset + 2 * ($start + $index)) * $gain
+                $value = $clip[$index] * $gain
                 $value *= [Math]::Min(1, ($index + 1) / $fadeIn)
                 $value *= [Math]::Min(1, ($count - $index) / $fadeOut)
                 [BitConverter]::GetBytes([int16][Math]::Round($value)).CopyTo($pcm, 2 * $index)

@@ -24,7 +24,7 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 ## Voice and saved settings
 
 - [ ] Enable Voice cues and preview a pattern. Confirm embedded `right` and `left` clips play offline.
-- [ ] At the default 150 ms lead, compare each spoken direction with its visual transition. Try 0 ms and 350 ms to confirm the adjustable lead is applied.
+- [ ] At the default 75 ms lead, compare each spoken direction with its visual transition. Try 0 ms and 350 ms to confirm the adjustable lead is applied.
 - [ ] Move the window to another position and enter practice mode. Exit through the app close control, relaunch, and confirm the saved position and settings are restored.
 - [ ] If multiple monitors are available, save a position on a secondary display, relaunch, and verify it restores sensibly. Then disconnect or change the display arrangement and confirm the window remains reachable.
 

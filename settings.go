@@ -27,8 +27,12 @@ type Settings struct {
 	Positioned     bool `json:"positioned"`
 }
 
+// The spoken clips are over within about 75 ms, so by default each word
+// finishes just as its direction change arrives.
+const defaultVoiceLeadMS = 75
+
 func defaultSettings() Settings {
-	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, LeftKey: 0x1E, RightKey: 0x20, Voice: true, VoiceLeadMS: 150, Width: 620, Height: 600}
+	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, LeftKey: 0x1E, RightKey: 0x20, Voice: true, VoiceLeadMS: defaultVoiceLeadMS, Width: 620, Height: 600}
 }
 func clamp(v, low, high int) int {
 	if v < low {

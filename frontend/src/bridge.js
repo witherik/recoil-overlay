@@ -17,7 +17,7 @@ const mock = {
     timelineIdle: false,
     timelineOffset: 32,
     voice: true,
-    voiceLeadMs: 150,
+    voiceLeadMs: 75,
   },
   phases,
   editing: true,
