@@ -26,7 +26,6 @@ type Settings struct {
 	RightKey       int    `json:"rightKey"`
 	StartKey       int    `json:"startKey"` // enters practice; may equal EndKey, making one toggle
 	EndKey         int    `json:"endKey"`
-	PauseKey       int    `json:"pauseKey"` // disables or enables practice input
 	Voice          bool   `json:"voice"`
 	VoiceStyle     string `json:"voiceStyle"` // "fast", "natural" or "tones"
 	VoiceStart     bool   `json:"voiceStart"` // also announce the first strafe of a spray
@@ -48,7 +47,7 @@ func defaultSettings() Settings {
 		Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green",
 		Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: 420,
 		LeftKey: 0x1E, RightKey: 0x20, // A and D
-		StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, // F8 and F9
+		StartKey: 0x42, EndKey: 0x42, // F8
 		Voice: true, VoiceStyle: "fast", VoiceLeadMS: voiceLeads["fast"],
 	}
 }
@@ -74,8 +73,8 @@ func (s Settings) normalized() Settings {
 	if s.LeftKey <= 0 || s.RightKey <= 0 || s.LeftKey == s.RightKey {
 		s.LeftKey, s.RightKey = d.LeftKey, d.RightKey
 	}
-	if s.StartKey <= 0 || s.EndKey <= 0 || s.PauseKey <= 0 || s.PauseKey == s.StartKey || s.PauseKey == s.EndKey {
-		s.StartKey, s.EndKey, s.PauseKey = d.StartKey, d.EndKey, d.PauseKey
+	if s.StartKey <= 0 || s.EndKey <= 0 {
+		s.StartKey, s.EndKey = d.StartKey, d.EndKey
 	}
 	if _, known := voiceLeads[s.VoiceStyle]; !known {
 		s.VoiceStyle = d.VoiceStyle

@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 
 func testApp() (*App, *[]string) {
 	spoken := []string{}
-	a := &App{settings: defaultSettings(), armed: true, inputReady: true, speak: func(_, s string) { spoken = append(spoken, s) }, silence: func() {}}
+	a := &App{settings: defaultSettings(), inputReady: true, speak: func(_, s string) { spoken = append(spoken, s) }, silence: func() {}}
 	a.settings.VoiceLeadMS = 150
 	a.settings.VoiceStart = true
 	return a, &spoken
@@ -69,21 +69,22 @@ func TestVoiceLeadAndExactVisualBoundaries(t *testing.T) {
 	if a.running || a.elapsed != 2210 {
 		t.Fatal("pattern must stop at 2210ms")
 	}
+	if s := a.snapshotLocked(); s.Direction != "right" || s.Phase != 2 {
+		t.Fatal("a finished pattern should hold its last arrow")
+	}
 	a.advanceLocked(at.Add(4*time.Second), true)
 	if a.running || len(*spoken) != 3 {
 		t.Fatal("pattern must not loop")
 	}
 }
-func TestStartGatesAndFreshPressAfterPause(t *testing.T) {
-	for _, mode := range []string{"editing", "disabled", "unfocused", "unavailable"} {
+func TestStartGatesAndFreshPress(t *testing.T) {
+	for _, mode := range []string{"editing", "unfocused", "unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			a, _ := testApp()
 			e := inputEvent{Kind: "down", At: time.Now(), Apex: true}
 			switch mode {
 			case "editing":
 				a.editing = true
-			case "disabled":
-				a.armed = false
 			case "unfocused":
 				e.Apex = false
 			case "unavailable":
@@ -101,12 +102,6 @@ func TestStartGatesAndFreshPressAfterPause(t *testing.T) {
 	a.handleInputLocked(e)
 	if a.runID != 1 {
 		t.Fatal("repeat down restarted spray")
-	}
-	a.pauseLocked()
-	a.pauseLocked()
-	a.handleInputLocked(e)
-	if a.running {
-		t.Fatal("reenabling while held must not restart")
 	}
 	a.handleInputLocked(inputEvent{Kind: "up"})
 	a.handleInputLocked(e)
@@ -236,23 +231,6 @@ func TestOpeningStrafeIsSilentByDefault(t *testing.T) {
 	}
 }
 
-func TestPracticeKeys(t *testing.T) {
-	a, _ := testApp()
-	a.editing = true
-	key := func(code int, down bool) { a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: down}) }
-	pause := a.settings.PauseKey
-	key(pause, true)
-	key(pause, true) // auto-repeat of a held key
-	if a.armed {
-		t.Fatal("the pause key should disable once per press")
-	}
-	key(pause, false)
-	key(pause, true)
-	if !a.armed {
-		t.Fatal("a fresh press should enable again")
-	}
-}
-
 func TestBindKey(t *testing.T) {
 	a, _ := testApp()
 	a.editing = true
@@ -275,9 +253,8 @@ func TestBindKey(t *testing.T) {
 		t.Fatalf("swap: %+v", a.settings)
 	}
 	// A key held by an unrelated action is refused, and the binding keeps waiting.
-	bind("start", a.settings.PauseKey)
-	press(a.settings.LeftKey)
-	if a.binding != "start" || a.settings.StartKey != 0x42 || !a.armed {
+	bind("start", a.settings.LeftKey)
+	if a.binding != "start" || a.settings.StartKey != 0x42 {
 		t.Fatalf("taken keys must be refused: %+v", a.settings)
 	}
 	press(0x41) // F7: start and end may then differ

@@ -94,12 +94,9 @@ func practiceStatus(s Snapshot) string {
 	if s.Moving {
 		return "DRAG TO POSITION"
 	}
-	start, end, pause := strings.ToUpper(s.StartKey), strings.ToUpper(s.EndKey), strings.ToUpper(s.PauseKey)
+	start, end := strings.ToUpper(s.StartKey), strings.ToUpper(s.EndKey)
 	if s.Editing {
 		return "EDIT MODE  /  " + start + " TO PRACTICE"
-	}
-	if !s.Armed {
-		return "DISABLED  /  " + pause + " TO ENABLE"
 	}
 	if !s.Focused {
 		return "WAITING FOR APEX  /  " + end + " TO EDIT"
@@ -107,7 +104,7 @@ func practiceStatus(s Snapshot) string {
 	if s.Held && !s.Running {
 		return "RELEASE TO RESET"
 	}
-	return end + " EDIT  /  " + pause + " DISABLE"
+	return end + " TO EDIT"
 }
 
 // Everything a frame depends on. An unchanged frame is not drawn again.
@@ -117,7 +114,7 @@ type frameKey struct {
 	DPI               uint32
 	Elapsed           int64
 	Direction, Status string
-	Armed, Moving     bool
+	Moving            bool
 	Held, Editing     bool
 	Revision          uint64
 }
@@ -139,7 +136,7 @@ func renderPractice(s Snapshot) error {
 	if dpi == 0 {
 		dpi = 96
 	}
-	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Armed, s.Moving, s.Held, s.Editing, s.revision}
+	key := frameKey{s.Settings, width, height, uint32(dpi), s.ElapsedMS, s.Direction, practiceStatus(s), s.Moving, s.Held, s.Editing, s.revision}
 	if practiceFrameValid && key == lastPracticeFrame {
 		return nil
 	}
@@ -302,8 +299,8 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	size := float64(s.Settings.ArrowSize)
 	if s.Settings.Arrows {
 		apart := (float64(s.Settings.Gap) + size) / 2
-		c.arrow("left", center-apart, anchor, size, scheme.left, s.Armed && s.Direction == "left")
-		c.arrow("right", center+apart, anchor, size, scheme.right, s.Armed && s.Direction == "right")
+		c.arrow("left", center-apart, anchor, size, scheme.left, s.Direction == "left")
+		c.arrow("right", center+apart, anchor, size, scheme.right, s.Direction == "right")
 	}
 	// The status line keeps clear of the timeline: it takes the other side.
 	above := timelineAbove(s.Settings)

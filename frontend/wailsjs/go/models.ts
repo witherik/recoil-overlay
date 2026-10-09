@@ -18,7 +18,6 @@ export namespace main {
 	    rightKey: number;
 	    startKey: number;
 	    endKey: number;
-	    pauseKey: number;
 	    voice: boolean;
 	    voiceStyle: string;
 	    voiceStart: boolean;
@@ -50,7 +49,6 @@ export namespace main {
 	        this.rightKey = source["rightKey"];
 	        this.startKey = source["startKey"];
 	        this.endKey = source["endKey"];
-	        this.pauseKey = source["pauseKey"];
 	        this.voice = source["voice"];
 	        this.voiceStyle = source["voiceStyle"];
 	        this.voiceStart = source["voiceStart"];
@@ -66,7 +64,6 @@ export namespace main {
 	    weapon: string;
 	    mode: string;
 	    editing: boolean;
-	    armed: boolean;
 	    focused: boolean;
 	    inputReady: boolean;
 	    running: boolean;
@@ -88,7 +85,6 @@ export namespace main {
 	    rightKey: string;
 	    startKey: string;
 	    endKey: string;
-	    pauseKey: string;
 	    binding: string;
 	
 	    static createFrom(source: any = {}) {
@@ -102,7 +98,6 @@ export namespace main {
 	        this.weapon = source["weapon"];
 	        this.mode = source["mode"];
 	        this.editing = source["editing"];
-	        this.armed = source["armed"];
 	        this.focused = source["focused"];
 	        this.inputReady = source["inputReady"];
 	        this.running = source["running"];
@@ -124,7 +119,6 @@ export namespace main {
 	        this.rightKey = source["rightKey"];
 	        this.startKey = source["startKey"];
 	        this.endKey = source["endKey"];
-	        this.pauseKey = source["pauseKey"];
 	        this.binding = source["binding"];
 	    }
 	

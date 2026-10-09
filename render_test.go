@@ -10,7 +10,7 @@ import (
 
 func TestPracticeCanvasKeepsCrosshairTransparent(t *testing.T) {
 	for _, dpi := range []float64{1, 1.5, 2} {
-		s := Snapshot{Settings: defaultSettings(), Armed: true, Focused: true, Direction: "right"}
+		s := Snapshot{Settings: defaultSettings(), Focused: true, Direction: "right"}
 		img := drawPractice(s, int(620*dpi), int(600*dpi), dpi)
 		if img.RGBAAt(int(310*dpi), int(142*dpi)).A != 0 {
 			t.Fatal("crosshair must be transparent")
@@ -59,7 +59,7 @@ func r301() []pattern.Phase {
 }
 
 func TestPlayerTrackAndReviewLabels(t *testing.T) {
-	s := Snapshot{Settings: defaultSettings(), Armed: true, Focused: true, Direction: "right", Running: true, ElapsedMS: 1000, Phases: r301(), TotalMS: 2210}
+	s := Snapshot{Settings: defaultSettings(), Focused: true, Direction: "right", Running: true, ElapsedMS: 1000, Phases: r301(), TotalMS: 2210}
 	s.Player = []pattern.Segment{{StartMS: 0, EndMS: 800, Direction: "right"}, {StartMS: 800, EndMS: 900, Direction: ""}, {StartMS: 900, EndMS: 1000, Direction: "left"}}
 	img := drawPractice(s, 464, 500, 1)
 	// The player row sits 58 px below the top of the timeline box.
@@ -81,7 +81,7 @@ func TestPlayerTrackAndReviewLabels(t *testing.T) {
 }
 
 func TestTimelineAboveTheArrows(t *testing.T) {
-	s := Snapshot{Settings: defaultSettings(), Armed: true, Focused: true, Direction: "right", Phases: r301(), TotalMS: 2210}
+	s := Snapshot{Settings: defaultSettings(), Focused: true, Direction: "right", Phases: r301(), TotalMS: 2210}
 	s.Settings.TimelineOffset = -40
 	width, height := overlaySize(s.Settings, 1)
 	anchor := int(anchorY(s.Settings))

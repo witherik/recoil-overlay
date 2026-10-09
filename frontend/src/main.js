@@ -36,7 +36,6 @@ const bindings = {
   right: "Strafe right",
   start: "Start practice",
   end: "End practice",
-  pause: "Disable / enable",
 };
 
 // The markup. Rows are flex containers, so nothing depends on the whitespace
@@ -112,7 +111,7 @@ const cards = [
   ),
 ];
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.1</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
+ <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.2</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
  <main class="controls">
   <section class="weapon-bar">
    <button id="weapon-button" class="weapon-button" aria-haspopup="listbox" aria-expanded="false"><img id="weapon-icon" alt="" hidden><span class="weapon-text"><small>WEAPON</small><strong id="weapon-label"></strong></span>${icon("chevron")}</button>
@@ -121,7 +120,7 @@ document.querySelector("#app").innerHTML = `
   </section>
   <div class="cards">${cards.join("")}</div>
   <div class="actions"><button id="preview">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
-  <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span> <span class="divider">·</span> <kbd id="help-pause"></kbd> disable / enable</p>
+  <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span></p>
   <p id="error" role="alert" title="Click to dismiss" hidden></p>
  </main>
  <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button></footer>
@@ -228,7 +227,6 @@ function statusText(s) {
   if (!native) return "Browser preview · global input unavailable";
   if (!s.inputReady) return "Input unavailable";
   if (s.binding) return "Press an unused key · Esc cancels";
-  if (!s.armed) return `Paused · ${s.pauseKey} to resume`;
   if (s.moving) return "Drag the overlay onto your crosshair";
   if (s.editing) return "Edit mode · adjust your overlay";
   if (!s.focused) return "Waiting for Apex Legends";
@@ -275,7 +273,6 @@ function render(s) {
   $("help-start").textContent = s.startKey;
   $("help-toggle").textContent =
     s.startKey === s.endKey ? "edit / practice" : `practice, ${s.endKey} edit`;
-  $("help-pause").textContent = s.pauseKey;
   $("preview").textContent =
     s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
   $("showOverlay").textContent = s.shown ? "Hide" : "Show";
@@ -284,7 +281,7 @@ function render(s) {
   // Not tied to unsaved edits: clicking it saves them first.
   $("lock").disabled = !s.inputReady;
   $("status").textContent = statusText(s);
-  $("status-dot").classList.toggle("live", s.inputReady && s.armed);
+  $("status-dot").classList.toggle("live", s.inputReady);
   showError();
 }
 // Sends unsaved edits, one request at a time, until none are left.
@@ -384,7 +381,7 @@ function armReset(on) {
   clearTimeout(resetArmed);
   resetArmed = on && setTimeout(() => armReset(false), 3000);
   $("reset").textContent = on ? "Click again to reset" : "Reset defaults";
-  $("reset").classList.toggle("waiting", Boolean(on));
+  $("reset").classList.toggle("confirm", Boolean(on));
 }
 $("reset").onclick = async () => {
   if (!resetArmed) return armReset(true);

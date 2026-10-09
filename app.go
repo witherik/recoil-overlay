@@ -23,7 +23,6 @@ type Snapshot struct {
 	Weapon     string          `json:"weapon"`
 	Mode       string          `json:"mode"` // shown beside the weapon name
 	Editing    bool            `json:"editing"`
-	Armed      bool            `json:"armed"`
 	Focused    bool            `json:"focused"`
 	InputReady bool            `json:"inputReady"`
 	Running    bool            `json:"running"`
@@ -49,7 +48,6 @@ type Snapshot struct {
 	RightKey string `json:"rightKey"`
 	StartKey string `json:"startKey"`
 	EndKey   string `json:"endKey"`
-	PauseKey string `json:"pauseKey"`
 	Binding  string `json:"binding"`
 
 	revision uint64
@@ -87,11 +85,11 @@ type App struct {
 	done   chan struct{}
 
 	view
-	armed, focused, inputReady bool
-	held                       bool         // left mouse button
-	leftDown, rightDown        bool         // strafe keys
-	binding                    string       // the action waiting for a key, see keySlotsLocked
-	hotDown                    map[int]bool // practice keys still down, see hotkeyLocked
+	focused, inputReady bool
+	held                bool         // left mouse button
+	leftDown, rightDown bool         // strafe keys
+	binding             string       // the action waiting for a key, see keySlotsLocked
+	hotDown             map[int]bool // practice keys still down, see hotkeyLocked
 
 	// The spray in progress.
 	running, preview bool
@@ -117,7 +115,6 @@ func NewApp() *App {
 	return &App{
 		settings: readSettings(),
 		view:     view{editing: true},
-		armed:    true,
 		events:   make(chan inputEvent, 256),
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
@@ -213,7 +210,7 @@ func (a *App) handleInputLocked(e inputEvent) {
 	case "down":
 		if !a.held {
 			a.held = true
-			if !a.editing && a.armed && a.inputReady && e.Apex {
+			if !a.editing && a.inputReady && e.Apex {
 				a.startLocked(e.At, false)
 			}
 		}
@@ -387,14 +384,11 @@ func (a *App) strafeLocked(ms int64) {
 // each one fires only on a fresh press.
 func (a *App) hotkeyLocked(code int, down bool) {
 	s := a.settings
-	if !down || a.hotDown[code] || (code != s.StartKey && code != s.EndKey && code != s.PauseKey) {
+	if !down || a.hotDown[code] || (code != s.StartKey && code != s.EndKey) {
 		return
 	}
 	a.holdLocked(code)
-	switch {
-	case code == s.PauseKey:
-		a.pauseLocked()
-	case a.editing && code == s.StartKey, !a.editing && code == s.EndKey:
+	if a.editing && code == s.StartKey || !a.editing && code == s.EndKey {
 		a.toggleLocked()
 	}
 }
@@ -407,16 +401,10 @@ func (a *App) holdLocked(code int) {
 	a.hotDown[code] = true
 }
 
-// pauseLocked disables or enables practice input.
-func (a *App) pauseLocked() {
-	a.armed = !a.armed
-	a.cancelLocked()
-}
-
 // syncKeysLocked tells the input thread which keys to forward.
 func (a *App) syncKeysLocked() {
 	s := a.settings
-	for i, code := range []int{s.LeftKey, s.RightKey, s.StartKey, s.EndKey, s.PauseKey} {
+	for i, code := range []int{s.LeftKey, s.RightKey, s.StartKey, s.EndKey} {
 		watchedKeys[i].Store(uint32(code))
 	}
 	captureKey.Store(a.binding != "")
@@ -425,7 +413,7 @@ func (a *App) syncKeysLocked() {
 // keySlotsLocked maps each bindable action to its setting.
 func (a *App) keySlotsLocked() map[string]*int {
 	s := &a.settings
-	return map[string]*int{"left": &s.LeftKey, "right": &s.RightKey, "start": &s.StartKey, "end": &s.EndKey, "pause": &s.PauseKey}
+	return map[string]*int{"left": &s.LeftKey, "right": &s.RightKey, "start": &s.StartKey, "end": &s.EndKey}
 }
 
 const escapeKey = 0x01
@@ -560,7 +548,12 @@ func (a *App) retreatLocked() {
 
 func (a *App) snapshotLocked() Snapshot {
 	weapon, mode := pattern.Find(a.settings.WeaponID, a.settings.ModeID)
-	phase, direction, _ := pattern.At(mode.Phases, a.elapsed)
+	phase, direction, done := pattern.At(mode.Phases, a.elapsed)
+	if done && len(mode.Phases) > 0 {
+		// A finished spray holds its last strafe until the release resets it.
+		phase = len(mode.Phases) - 1
+		direction = mode.Phases[phase].Direction
+	}
 	modeLabel := "EXPECTED STRAFE"
 	if mode.ID != "default" {
 		modeLabel = strings.ToUpper(mode.Name)
@@ -578,7 +571,6 @@ func (a *App) snapshotLocked() Snapshot {
 		Weapon:     weapon.Name,
 		Mode:       modeLabel,
 		Editing:    a.editing,
-		Armed:      a.armed,
 		Focused:    a.focused,
 		InputReady: a.inputReady,
 		Running:    a.running,
@@ -602,7 +594,6 @@ func (a *App) snapshotLocked() Snapshot {
 		RightKey: keyName(a.settings.RightKey),
 		StartKey: keyName(a.settings.StartKey),
 		EndKey:   keyName(a.settings.EndKey),
-		PauseKey: keyName(a.settings.PauseKey),
 		Binding:  a.binding,
 
 		revision: a.revision,
@@ -753,7 +744,7 @@ func (a *App) DismissError() Snapshot {
 }
 
 // BindKey waits for the next key press and binds it to action: a strafe key
-// ("left", "right") or a practice key ("start", "end", "pause"). Calling it
+// ("left", "right") or a practice key ("start", "end"). Calling it
 // again for the same action cancels.
 func (a *App) BindKey(action string) Snapshot {
 	a.mu.Lock()
@@ -780,7 +771,7 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	old := a.settings
 	s.X, s.Y, s.Positioned = old.X, old.Y, old.Positioned
 	s.OffsetX, s.OffsetY = old.OffsetX, old.OffsetY
-	s.LeftKey, s.RightKey, s.StartKey, s.EndKey, s.PauseKey = old.LeftKey, old.RightKey, old.StartKey, old.EndKey, old.PauseKey
+	s.LeftKey, s.RightKey, s.StartKey, s.EndKey = old.LeftKey, old.RightKey, old.StartKey, old.EndKey
 	s = s.normalized()
 	// A lead still at its style's default follows a change of style.
 	if s.VoiceStyle != old.VoiceStyle && s.VoiceLeadMS == voiceLeads[old.VoiceStyle] {

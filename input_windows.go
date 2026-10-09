@@ -31,7 +31,7 @@ type inputEvent struct {
 // The listener forwards only the bound keys (two strafe keys, three hotkeys),
 // or the next key pressed while a binding is being captured. Every other
 // keystroke is dropped unread.
-var watchedKeys [5]atomic.Uint32
+var watchedKeys [4]atomic.Uint32
 var captureKey atomic.Bool
 
 func watched(code uint32) bool {

@@ -45,7 +45,7 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 		getWindowRect.Call(overlay, uintptr(unsafe.Pointer(&rect)))
 		return
 	}
-	s := Snapshot{Settings: defaultSettings(), Armed: true, Direction: "right"}
+	s := Snapshot{Settings: defaultSettings(), Direction: "right"}
 	if err := setOverlayMode(overlayPractice, s.Settings); err != nil {
 		t.Fatal(err)
 	}

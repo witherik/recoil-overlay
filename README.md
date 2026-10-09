@@ -27,7 +27,6 @@ The program operates on Windows 10 and Windows 11 (64-bit). The Microsoft Edge W
 | Key | Function |
 | --- | --- |
 | F8 | Starts and stops the practice mode. |
-| F9 | Disables and enables the practice input. |
 | A, D | The strafe keys that the program reads. |
 
 You can change all keys in the **Keys** card.
@@ -59,6 +58,8 @@ You can change all keys in the **Keys** card.
 - The title of the game window must be `Apex Legends`.
 - The program contains 20 patterns for 15 weapons. The patterns come from a community trainer. They are not game measurements.
 
+The program reads only the left mouse button and the four keys in the **Keys** card. It discards all other keys. The voice cues are in the program file. An internet connection is not necessary.
+
 ## Build
 
 These items are necessary:
@@ -82,41 +83,6 @@ Build the program:
 
 The script installs the frontend packages, does the Go tests and builds `build\bin\recoil-overlay.exe`. Add `-Dev` to start the program in the Wails development mode.
 
-## Test
-
-Build the program first. The Go tests use the built frontend.
-
-```powershell
-go vet ./...
-go test ./...
-cd frontend
-npm test
-```
-
-- The frontend tests use Google Chrome.
-- Two Go tests use real windows and Raw Input. Set `RECOIL_NATIVE_TEST=1` to include them.
-- The automatic tests cannot examine the overlay in the game. Use the [manual checklist](docs/manual-checks.md) for that.
-
-## Release
-
-1. Set `productVersion` in `wails.json` and the version text in `frontend/src/main.js`.
-2. Make a tag with the same version and push it:
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-GitHub Actions builds `recoil-overlay.exe` and attaches it to a new release.
-
-## Design
-
-- The settings window is a Wails (WebView2) window.
-- Go draws the overlay into a separate layered window. Windows lets mouse clicks go through this window to the game.
-- A separate window is necessary because Windows cannot make the transparent Wails window a layered window.
-- A Raw Input listener reads the left mouse button and the five bound keys. It discards all other keys.
-- The voice cues are in the program file. An internet connection is not necessary.
-
 ## Credits
 
 - This project is a fork of [superglide-overlay](https://github.com/AlexKimmel/superglide-overlay) by AlexKimmel (MIT License).
@@ -124,6 +90,10 @@ GitHub Actions builds `recoil-overlay.exe` and attaches it to a new release.
 - [Wails](https://wails.io/) supplies the window and the build tools.
 
 Apex Legends is a trademark of Electronic Arts Inc. This project has no relation to Electronic Arts or Respawn Entertainment. The weapon icons in `frontend/src/assets/weapons` are their property, and the MIT License does not apply to them.
+
+## Maintenance
+
+The tests, the release procedure and the design are in the [maintainer notes](docs/maintaining.md).
 
 ## License
 

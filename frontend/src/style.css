@@ -75,21 +75,29 @@ input:not([type="number"]) {
   opacity: 0.4;
   cursor: default;
 }
-button.primary {
+/* The filled buttons keep their colour under the pointer and only brighten. */
+button.primary,
+button.primary:hover {
   background: var(--right);
   color: var(--bg);
 }
-.primary:hover {
+:is(.primary, .confirm):hover {
   filter: brightness(1.1);
 }
 .active,
 [aria-selected="true"] {
   box-shadow: inset 0 2px var(--right);
 }
-/* Waiting for a key press, or for the second click of a reset. */
+/* Waiting for a key press. */
 .waiting {
   box-shadow: inset 0 2px var(--left);
   color: var(--left);
+}
+/* Waiting for the second click of a reset. */
+button.confirm,
+button.confirm:hover {
+  background: var(--left);
+  color: var(--bg);
 }
 .icon {
   width: 32px;
@@ -254,7 +262,7 @@ footer {
 .weapon-group,
 .binds {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 .weapon-option {

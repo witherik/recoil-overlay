@@ -50,7 +50,6 @@ const mock = {
   weapon: "R-301",
   mode: "EXPECTED STRAFE",
   editing: true,
-  armed: true,
   focused: false,
   inputReady: false,
   running: false,
@@ -71,7 +70,6 @@ const mock = {
   rightKey: "D",
   startKey: "F8",
   endKey: "F8",
-  pauseKey: "F9",
   binding: "",
 };
 const defaults = structuredClone(mock.settings);
@@ -116,9 +114,8 @@ const browserAPI = {
         Math.floor(performance.now() - started),
       );
       const done = mock.elapsedMs >= totalMs;
-      mock.phase = done
-        ? -1
-        : starts.findLastIndex((at) => mock.elapsedMs >= at);
+      // A finished pattern holds its last phase.
+      mock.phase = starts.findLastIndex((at) => mock.elapsedMs >= at);
       mock.direction = phases[mock.phase]?.direction || "";
       // Each cue leads its phase; the first cannot, and is opt-in.
       while (
