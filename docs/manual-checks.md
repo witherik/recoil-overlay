@@ -1,45 +1,65 @@
-# Windows manual verification
+# Manual checklist
 
-Use this checklist on a Windows amd64 desktop with the native app and Apex Legends installed. These checks require the game window and display hardware; browser tests do not verify native alpha blending, click-through, global hotkeys, or Raw Input.
+The automatic tests cannot examine the overlay in the game. Do these checks on a Windows computer with Apex Legends before a release. The key names are the default keys.
 
-## Overlay and input
+## Preparation
 
-- [ ] Open Apex Legends in borderless windowed mode and launch Recoil Practice.
-- [ ] Confirm the overlay is already on screen over the crosshair, reads `EDIT MODE / F8 TO PRACTICE`, and lets clicks through to whatever is under it.
-- [ ] In edit mode, change arrow spacing, size, opacity, timeline spacing and timeline width, by slider and by typing a value. Confirm the overlay follows each change.
-- [ ] Change **Colors** and confirm the settings window and the overlay both switch scheme.
-- [ ] Set the timeline spacing to a negative value. Confirm the timeline moves above the arrows, the status line moves below them, and the arrows stay on the crosshair.
-- [ ] Open the weapon menu, pick another weapon and, where offered, another firing mode. Confirm the overlay timeline changes with it.
-- [ ] Click **Hide** and confirm the overlay disappears; **Show** brings it back. Hide it, click **Preview pattern**, and confirm it returns and plays the pattern.
-- [ ] Click **Move**, drag the overlay by its backdrop, and click **Done**. Confirm it stays where you left it, without the backdrop, and is still there in practice mode. Click **Center** and confirm it returns to the crosshair.
-- [ ] Click **–** in the title bar. Confirm the settings window goes to the taskbar and the overlay disappears; restore it from the taskbar and confirm the overlay returns. Minimise again, press F8 twice, and confirm practice starts and then the settings window comes back up.
-- [ ] Press F8 to enter practice mode. Confirm the settings window minimises to the taskbar, the overlay is click-through and stays above the game, and the arrows sit either side of the crosshair.
-- [ ] In practice mode, click the app in the taskbar. Confirm practice ends and the settings window comes back with the overlay preview.
-- [ ] With the R-301 selected and Apex Legends in the foreground, hold left-click. Confirm the right arrow starts immediately, the left arrow begins at 800 ms, and the right arrow returns at 1,330 ms.
-- [ ] Select the HAVOC in Normal mode. Confirm the timeline starts with a grey 350 ms phase, neither arrow is lit and no word is spoken until the first strafe is due. Switch to Turbocharged and confirm the grey phase disappears.
-- [ ] Release left-click during a run. Confirm the timeline resets and later phases do not appear after release.
-- [ ] Hold left-click through the full 2,210 ms pattern. Confirm the progress stays at the end, the active arrow turns off, and it does not loop. Release and click again to start a new run.
-- [ ] Alt-tab away during a run. Confirm focus loss cancels it. Return to Apex Legends and verify a fresh click starts a run.
-- [ ] Press F9 during a run. Confirm input is disabled and the run resets. Press F9 again, release any held click, then press again to verify a fresh click starts the pattern.
-- [ ] Press F8 to return to edit mode. Confirm the settings window returns, the overlay stays up, and Preview pattern runs without Apex Legends in the foreground.
+1. Start Apex Legends in the borderless window mode.
+2. Start Recoil Practice.
 
-## Strafe reading and score
+## Overlay
 
-- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills in the scheme's two colours (green for right and orange for left by default) as the playhead moves, and stays grey while neither or both keys are held.
-- [ ] Release. Confirm the spray stays on the timeline with a signed deviation under each switch and the total deviation in large figures in the header, until the next click.
-- [ ] Rebind a strafe key in edit mode, then confirm the new key is read and the old one is ignored. Press Escape while rebinding and confirm nothing changes.
-- [ ] Rebind **Start practice** to another key. Confirm it enters practice but does not leave it, and that the old key still ends practice. Hold the new key down and confirm it does not flip modes repeatedly.
-- [ ] Rebind **Disable / enable** and confirm the overlay status line names the new key. Try to bind a strafe key to a practice key and confirm it is refused.
+- [ ] The overlay shows on the crosshair. Its status line reads `EDIT MODE / F8 TO PRACTICE`.
+- [ ] Mouse clicks go through the overlay.
+- [ ] Change each slider and each number field. The overlay shows each change.
+- [ ] Change **Colors**. The settings window and the overlay change color.
+- [ ] Set the timeline spacing to a negative value. The timeline moves above the arrows. The status line moves below the arrows. The arrows stay on the crosshair.
+- [ ] Select a different weapon and a different fire mode. The timeline shows the new pattern.
+- [ ] Click **Hide**. The overlay goes out of view. Click **Show**. The overlay comes back.
+- [ ] Hide the overlay. Click **Preview pattern**. The overlay comes back and shows the pattern.
+- [ ] Click **Move**. Drag the overlay. Click **Done**. The overlay stays in its new position.
+- [ ] Click **Center**. The overlay goes back to the crosshair.
 
-## Voice and saved settings
+## Settings window
 
-- [ ] Enable Voice cues and preview a pattern. Confirm embedded `right` and `left` clips play offline.
-- [ ] Switch **Sound** to Natural voice, then Tones, previewing each. Confirm the lead follows to 125 ms and 0 ms, that a tone is heard right on its visual transition, and that a lead you typed yourself is kept on the next switch.
-- [ ] At the default 60 ms lead, compare each spoken direction with its visual transition. Try 0 ms and 350 ms to confirm the adjustable lead is applied.
-- [ ] Move the window to another position and enter practice mode. Exit through the app close control, relaunch, and confirm the saved position and settings are restored.
-- [ ] If multiple monitors are available, save a position on a secondary display, relaunch, and verify it restores sensibly. Then disconnect or change the display arrangement and confirm the window remains reachable.
+- [ ] Click **–** in the title bar. The settings window goes to the taskbar and the overlay goes out of view.
+- [ ] Click the program in the taskbar. The settings window and the overlay come back.
+- [ ] You cannot change the size of the settings window. All controls show without a scroll bar.
+- [ ] Move the settings window. Close the program and start it again. The window position and the settings are the same.
+- [ ] If you have a second monitor, do the last check on that monitor. Then disconnect the monitor and start the program. The window shows on the first monitor.
 
-## Display scaling
+## Practice mode
 
-- [ ] Check the overlay at the display's normal DPI scaling and at another Windows scaling level, if available. Confirm arrows, timeline, labels, and input controls remain legible and positioned correctly.
-- [ ] Confirm the settings window cannot be resized and shows every control without scrolling.
+- [ ] Push F8. The settings window goes to the taskbar. The overlay stays above the game.
+- [ ] Select the R-301. Hold the left mouse button. The right arrow comes on immediately. The left arrow comes on at 800 ms. The right arrow comes on again at 1,330 ms.
+- [ ] Hold the button for the full pattern. The playhead stops at the end and the pattern does not start again.
+- [ ] Release the button during a pattern. The pattern stops.
+- [ ] Push Alt+Tab during a pattern. The pattern stops. Go back to the game. A new click starts a pattern.
+- [ ] Push F9 during a pattern. The pattern stops and the status line reads `DISABLED`. Push F9 again. Only a new click starts a pattern.
+- [ ] Select the HAVOC in the Normal mode. The timeline starts with a grey phase of 350 ms. No arrow comes on and no voice cue sounds in this phase.
+- [ ] Push F8. The settings window comes back and the overlay stays in view.
+- [ ] Push F8. Click the program in the taskbar. The practice mode stops and the settings window comes back.
+
+## Score
+
+- [ ] Hold the left mouse button and strafe with A and D. The lower bar shows your strafes in the two colors. It stays grey when you hold no key or both keys.
+- [ ] Release the button. The timeline shows a time error below each direction change and the total deviation at the top.
+
+## Keys
+
+- [ ] Give a strafe key a different key. The program reads the new key and ignores the old key.
+- [ ] Start to change a key and push Escape. The key does not change.
+- [ ] Give **Start practice** a different key. The new key starts the practice mode but does not stop it. The old key stops it.
+- [ ] Hold the new key. The program changes mode only one time.
+- [ ] Try to give a practice key the key of a strafe key. The program refuses the key.
+
+## Voice
+
+- [ ] Click **Preview pattern** with each of the three sounds. Each sound plays without an internet connection.
+- [ ] Change **Sound**. The lead time changes to 60 ms, 125 ms or 0 ms. A lead time that you typed stays the same.
+- [ ] Set the lead time to 0 ms and then to 350 ms. The cue comes at the direction change and then 350 ms before it.
+
+## Errors and display scale
+
+- [ ] If an error message shows, click it. The message goes out of view.
+- [ ] Do the overlay checks again at a different Windows display scale. The arrows, the timeline and the text have the correct position and size.

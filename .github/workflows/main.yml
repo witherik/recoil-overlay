@@ -1,10 +1,16 @@
-name: Build Recoil Practice
+name: Build
 
+# A push or a pull request builds and tests the program.
+# A tag that starts with "v" also publishes a release with the file.
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - release
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,20 +21,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.23.12'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.1
-
-      - name: Add Go bin to PATH
-        run: echo "$env:USERPROFILE\\go\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install frontend dependencies
         run: npm ci
@@ -39,7 +42,9 @@ jobs:
         working-directory: frontend
 
       - name: Test Go
-        run: go test ./...
+        run: |
+          go vet ./...
+          go test ./...
 
       - name: Test frontend
         run: npm test
@@ -48,11 +53,16 @@ jobs:
       - name: Build Windows amd64 app
         run: wails build -platform windows/amd64
 
-      - name: List output files for debug
-        run: dir build\bin
-
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: recoil-practice-windows-amd64
           path: build/bin/recoil-overlay.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $hash = (Get-FileHash build\bin\recoil-overlay.exe -Algorithm SHA256).Hash.ToLower()
+          gh release create $env:GITHUB_REF_NAME build/bin/recoil-overlay.exe --title "Recoil Practice $env:GITHUB_REF_NAME" --notes "SHA-256 of recoil-overlay.exe: $hash" --generate-notes
