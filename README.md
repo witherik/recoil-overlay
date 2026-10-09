@@ -12,9 +12,8 @@ The program only reads the mouse and the keyboard. It does not send input to the
 
 ## Use
 
-- Select weapon.
-- Start practice.
-- There's no countdown, instead the practice starts once you start shooting (holding leftclick.
+There's no countdown, the practice starts once you start shooting (holding leftclick).
+
 
 https://github.com/user-attachments/assets/5512f863-05c0-4c45-9105-68176445ffe5
 
