@@ -64,6 +64,14 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	if centred.Left+(centred.Right-centred.Left)/2 != x || centred.Top+int32(arrowAnchorY*float64(practiceDPI)/96+.5) != y {
 		t.Fatalf("arrows not centred on crosshair (%d,%d): %+v at %d dpi", x, y, centred, practiceDPI)
 	}
+	// The edit-mode preview is the same click-through window, in the same place.
+	if err := setOverlayMode(overlayPreview, s.Settings); err != nil {
+		t.Fatal(err)
+	}
+	style, _, _ = getWindowLong.Call(overlay, ^uintptr(19))
+	if visible, _, _ := isVisible.Call(overlay); visible == 0 || style&0x20 == 0 || practiceRect != centred {
+		t.Fatalf("preview: style %#x, rect %+v", style, practiceRect)
+	}
 	// Move mode takes the mouse and honours the saved offset.
 	s.Moving, s.Settings.OffsetX, s.Settings.OffsetY = true, 30, -20
 	if err := setOverlayMode(overlayMove, s.Settings); err != nil {
@@ -88,7 +96,7 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	}
 }
 func TestEmbeddedVoiceClips(t *testing.T) {
-	for name, clip := range map[string][]byte{"left": voiceLeft, "right": voiceRight} {
+	for name, clip := range map[string][]byte{"left": voiceLeft, "right": voiceRight, "natural left": naturalLeft, "natural right": naturalRight, "left tone": toneLeft, "right tone": toneRight} {
 		if len(clip) < 44 || string(clip[:4]) != "RIFF" || string(clip[8:12]) != "WAVE" {
 			t.Fatalf("invalid %s WAV", name)
 		}
@@ -118,7 +126,7 @@ func TestNativeInputLifecycle(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("input thread did not stop")
 	}
-	// Registration must have been released so a new instance can claim F8/F9.
+	// The listener must be able to start again after a clean stop.
 	second, err := startNativeInput(events)
 	if err != nil {
 		t.Fatal(err)

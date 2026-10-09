@@ -22,8 +22,9 @@ func TestMain(m *testing.M) {
 
 func testApp() (*App, *[]string) {
 	spoken := []string{}
-	a := &App{settings: defaultSettings(), armed: true, inputReady: true, speak: func(s string) { spoken = append(spoken, s) }, silence: func() {}}
+	a := &App{settings: defaultSettings(), armed: true, inputReady: true, speak: func(_, s string) { spoken = append(spoken, s) }, silence: func() {}}
 	a.settings.VoiceLeadMS = 150
+	a.settings.VoiceStart = true
 	return a, &spoken
 }
 func TestHoldReleaseCancelsFutureCues(t *testing.T) {
@@ -156,7 +157,7 @@ func TestStrafeTrackAndReview(t *testing.T) {
 	if !reflect.DeepEqual(s.Player, want) || s.PlayerEndMS != 1900 || s.ElapsedMS != 0 {
 		t.Fatalf("review track: %+v end %d", s.Player, s.PlayerEndMS)
 	}
-	if s.Score == nil || s.Score.AverageMS != 17 || s.Score.Missed != 0 || s.Score.Switches[1].DeviationMS != 20 || s.Score.Switches[2].DeviationMS != 30 {
+	if s.Score == nil || s.Score.TotalMS != 50 || s.Score.Missed != 0 || s.Score.Switches[1].DeviationMS != 20 || s.Score.Switches[2].DeviationMS != 30 {
 		t.Fatalf("score: %+v", s.Score)
 	}
 	// A tap does not wipe the review; a real spray replaces it.
@@ -191,5 +192,129 @@ func TestBindKey(t *testing.T) {
 	bind("right", 0xE04B) // taking the other side's key swaps them
 	if a.settings.RightKey != 0xE04B || a.settings.LeftKey != right {
 		t.Fatalf("swap: %+v", a.settings)
+	}
+}
+
+func TestWeaponPatternsDriveCuesAndScore(t *testing.T) {
+	a, spoken := testApp()
+	a.settings.WeaponID, a.settings.ModeID = "havoc", "normal"
+	at := time.Now()
+	a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+	if s := a.snapshotLocked(); s.Weapon != "HAVOC" || s.Mode != "NORMAL" || s.TotalMS != 2850 || s.Direction != "" || len(*spoken) != 0 {
+		t.Fatalf("the charge-up is neutral and silent: %+v %v", s, *spoken)
+	}
+	a.advanceLocked(at.Add(199*time.Millisecond), true)
+	if len(*spoken) != 0 {
+		t.Fatal(*spoken)
+	}
+	a.advanceLocked(at.Add(200*time.Millisecond), true) // 350 ms switch minus the 150 ms lead
+	if !reflect.DeepEqual(*spoken, []string{"right"}) {
+		t.Fatal(*spoken)
+	}
+	a.handleInputLocked(inputEvent{Kind: "key", Code: a.settings.RightKey, Down: true, At: at.Add(380 * time.Millisecond)})
+	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(600 * time.Millisecond)})
+	s := a.snapshotLocked()
+	if s.Score == nil || len(s.Score.Switches) != 1 || s.Score.Switches[0].AtMS != 350 || s.Score.Switches[0].DeviationMS != 30 {
+		t.Fatalf("score: %+v", s.Score)
+	}
+	// Switching weapon drops the review, which was scored against the old pattern.
+	a.editing = true
+	next := a.settings
+	next.WeaponID, next.ModeID = "r99", ""
+	if _, err := a.UpdateSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if s := a.snapshotLocked(); s.Score != nil || s.Weapon != "R-99" || s.Settings.ModeID != "default" || s.Mode != "EXPECTED STRAFE" || s.TotalMS != 1450 {
+		t.Fatalf("after switching weapon: %+v", s)
+	}
+}
+
+func TestOpeningStrafeIsSilentByDefault(t *testing.T) {
+	if defaultSettings().VoiceStart {
+		t.Fatal("the opening cue should be opt-in")
+	}
+	for _, test := range []struct {
+		weapon, mode string
+		atMS         int
+		want         []string
+	}{
+		{"r301", "default", 700, []string{"left"}},       // not "right" at the click
+		{"havoc", "normal", 600, []string{"left"}},       // nor "right" after the wait
+		{"havoc", "turbocharged", 300, []string{"left"}}, // 370 ms switch minus the lead
+		{"havoc", "turbocharged", 219, nil},
+	} {
+		a, spoken := testApp()
+		a.settings.VoiceStart = false
+		a.settings.WeaponID, a.settings.ModeID = test.weapon, test.mode
+		at := time.Now()
+		a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+		for ms := 10; ms <= test.atMS; ms += 10 {
+			a.advanceLocked(at.Add(time.Duration(ms)*time.Millisecond), true)
+		}
+		a.advanceLocked(at.Add(time.Duration(test.atMS)*time.Millisecond), true)
+		if !reflect.DeepEqual(append([]string(nil), *spoken...), test.want) {
+			t.Errorf("%s/%s at %d ms: spoke %v, want %v", test.weapon, test.mode, test.atMS, *spoken, test.want)
+		}
+	}
+}
+
+func TestPracticeKeys(t *testing.T) {
+	a, _ := testApp()
+	a.editing = true
+	key := func(code int, down bool) { a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: down}) }
+	pause := a.settings.PauseKey
+	key(pause, true)
+	key(pause, true) // auto-repeat of a held key
+	if a.armed {
+		t.Fatal("the pause key should disable once per press")
+	}
+	key(pause, false)
+	key(pause, true)
+	if !a.armed {
+		t.Fatal("a fresh press should enable again")
+	}
+	key(pause, false)
+	// A key held by an unrelated action is refused, and the binding keeps waiting.
+	a.binding = "start"
+	key(pause, true)
+	key(a.settings.LeftKey, true)
+	if a.binding != "start" || a.settings.StartKey != 0x42 || !a.armed {
+		t.Fatalf("taken keys must be refused: %+v", a.settings)
+	}
+	key(0x41, true) // F7: start and end may then differ
+	key(0x41, true) // its auto-repeat must not start practice
+	if a.binding != "" || a.settings.StartKey != 0x41 || a.settings.EndKey != 0x42 || !a.editing || a.err != "" {
+		t.Fatalf("bind start: %+v %q", a.settings, a.err)
+	}
+	a.binding = "end"
+	key(0x41, true) // sharing the start key makes it a toggle
+	if a.settings.EndKey != 0x41 || a.settings.StartKey != 0x41 {
+		t.Fatalf("shared key: %+v", a.settings)
+	}
+}
+
+func TestVoiceStyleMovesDefaultLead(t *testing.T) {
+	a, spoken := testApp()
+	a.editing = true
+	a.speak = func(style, direction string) { *spoken = append(*spoken, style+" "+direction) }
+	next := defaultSettings()
+	next.VoiceStyle = "natural"
+	a.settings = defaultSettings()
+	if s, _ := a.UpdateSettings(next); s.Settings.VoiceLeadMS != voiceLeads["natural"] {
+		t.Fatalf("lead should follow the style: %d", s.Settings.VoiceLeadMS)
+	}
+	next = a.settings
+	next.VoiceLeadMS, next.VoiceStyle = 120, "tones"
+	if s, _ := a.UpdateSettings(next); s.Settings.VoiceLeadMS != 120 {
+		t.Fatalf("a chosen lead should be kept: %d", s.Settings.VoiceLeadMS)
+	}
+	next.VoiceStyle = "bogus"
+	if s, _ := a.UpdateSettings(next); s.Settings.VoiceStyle != "fast" {
+		t.Fatalf("unknown style: %q", s.Settings.VoiceStyle)
+	}
+	a.settings.VoiceStyle, a.settings.VoiceStart, a.editing = "tones", true, false
+	a.handleInputLocked(inputEvent{Kind: "down", At: time.Now(), Apex: true})
+	if !reflect.DeepEqual(*spoken, []string{"tones right"}) {
+		t.Fatal(*spoken)
 	}
 }

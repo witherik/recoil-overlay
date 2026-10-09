@@ -4,35 +4,50 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"recoil-overlay/internal/pattern"
 )
 
 type Settings struct {
-	Gap            int  `json:"gap"`
-	ArrowSize      int  `json:"arrowSize"`
-	Opacity        int  `json:"opacity"`
-	Arrows         bool `json:"arrows"`
-	Timeline       bool `json:"timeline"`
-	TimelineIdle   bool `json:"timelineIdle"` // hide the timeline while left-click is held
-	OffsetX        int  `json:"offsetX"`
-	OffsetY        int  `json:"offsetY"`
-	TimelineOffset int  `json:"timelineOffset"`
-	LeftKey        int  `json:"leftKey"` // keyboard scan codes; 0xE000 marks extended keys
-	RightKey       int  `json:"rightKey"`
-	Voice          bool `json:"voice"`
-	VoiceLeadMS    int  `json:"voiceLeadMs"`
-	X              int  `json:"x"`
-	Y              int  `json:"y"`
-	Width          int  `json:"width"`
-	Height         int  `json:"height"`
-	Positioned     bool `json:"positioned"`
+	WeaponID       string `json:"weaponId"`
+	ModeID         string `json:"modeId"`
+	Gap            int    `json:"gap"`
+	ArrowSize      int    `json:"arrowSize"`
+	Opacity        int    `json:"opacity"`
+	Arrows         bool   `json:"arrows"`
+	Timeline       bool   `json:"timeline"`
+	TimelineIdle   bool   `json:"timelineIdle"` // hide the timeline while left-click is held
+	OffsetX        int    `json:"offsetX"`
+	OffsetY        int    `json:"offsetY"`
+	TimelineOffset int    `json:"timelineOffset"`
+	TimelineWidth  int    `json:"timelineWidth"`
+	LeftKey        int    `json:"leftKey"` // keyboard scan codes; 0xE000 marks extended keys
+	RightKey       int    `json:"rightKey"`
+	StartKey       int    `json:"startKey"` // enters practice; may equal EndKey, making one toggle
+	EndKey         int    `json:"endKey"`
+	PauseKey       int    `json:"pauseKey"` // disables or enables practice input
+	Voice          bool   `json:"voice"`
+	VoiceStyle     string `json:"voiceStyle"` // "fast", "natural" or "tones"
+	VoiceStart     bool   `json:"voiceStart"` // also announce the first strafe of a spray
+	VoiceLeadMS    int    `json:"voiceLeadMs"`
+	X              int    `json:"x"`
+	Y              int    `json:"y"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	Positioned     bool   `json:"positioned"`
 }
 
-// The spoken clips are over within about 75 ms, so by default each word
+// The fast spoken clips are over within about 75 ms, so by default each word
 // finishes just as its direction change arrives.
 const defaultVoiceLeadMS = 75
 
+// voiceLeads is the default lead of each voice style: roughly its clip length.
+var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 250, "tones": 60}
+
+const defaultTimelineWidth = 420
+
 func defaultSettings() Settings {
-	return Settings{Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, LeftKey: 0x1E, RightKey: 0x20, Voice: true, VoiceLeadMS: defaultVoiceLeadMS, Width: 620, Height: 600}
+	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 720}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -44,18 +59,27 @@ func clamp(v, low, high int) int {
 	return v
 }
 func (s Settings) normalized() Settings {
+	weapon, mode := pattern.Find(s.WeaponID, s.ModeID)
+	s.WeaponID, s.ModeID = weapon.ID, mode.ID
 	s.Gap = clamp(s.Gap, 40, 300)
 	s.ArrowSize = clamp(s.ArrowSize, 24, 72)
 	s.Opacity = clamp(s.Opacity, 20, 100)
-	s.TimelineOffset = clamp(s.TimelineOffset, 12, 100)
+	s.TimelineOffset = clamp(s.TimelineOffset, 12, 400)
+	s.TimelineWidth = clamp(s.TimelineWidth, 280, 800)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
 	s.OffsetY = clamp(s.OffsetY, -10000, 10000)
 	if s.LeftKey <= 0 || s.RightKey <= 0 || s.LeftKey == s.RightKey {
 		s.LeftKey, s.RightKey = 0x1E, 0x20 // A and D
 	}
+	if s.StartKey <= 0 || s.EndKey <= 0 || s.PauseKey <= 0 || s.PauseKey == s.StartKey || s.PauseKey == s.EndKey {
+		s.StartKey, s.EndKey, s.PauseKey = 0x42, 0x42, 0x43 // F8 and F9
+	}
+	if _, known := voiceLeads[s.VoiceStyle]; !known {
+		s.VoiceStyle = "fast"
+	}
 	s.VoiceLeadMS = clamp(s.VoiceLeadMS, 0, 350)
 	s.Width = clamp(s.Width, 520, 1400)
-	s.Height = clamp(s.Height, 560, 1000)
+	s.Height = clamp(s.Height, 440, 1200)
 	return s
 }
 func settingsPath() string {

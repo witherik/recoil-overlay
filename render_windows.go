@@ -9,6 +9,7 @@ import (
 	"image/draw"
 	"math"
 	"runtime"
+	"strings"
 	"unsafe"
 
 	"recoil-overlay/internal/pattern"
@@ -21,8 +22,8 @@ import (
 )
 
 // Practice draws a premultiplied alpha bitmap into a native layered window
-// placed exactly over the (hidden) Wails window; the OS then handles true
-// click-through. See setOverlayMode for why the Wails window can't be used.
+// placed over the crosshair; the OS then handles true click-through. Edit mode
+// shows the same window as its preview. See setOverlayMode for why the Wails window can't be used.
 var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
 var overlayFont, _ = opentype.Parse(goregular.TTF)
 
@@ -34,7 +35,7 @@ const arrowAnchorY = 142.0
 const inactiveArrowAlpha = 40
 
 // Height of the timeline box: header, expected track, player track, ticks.
-const timelineHeight = 107.0
+const timelineHeight = 110.0
 
 var practiceFrameValid bool
 var lastPracticeFrame frameKey
@@ -70,23 +71,27 @@ func overlaySize(s Settings, scale float64) (int32, int32) {
 	if s.Timeline {
 		height += float64(s.TimelineOffset) + timelineHeight - 4
 	}
-	return int32(math.Round(464 * scale)), int32(math.Round(height * scale))
+	return int32(math.Round(float64(max(464, s.TimelineWidth+44)) * scale)), int32(math.Round(height * scale))
 }
 
 func practiceStatus(s Snapshot) string {
 	if s.Moving {
 		return "DRAG TO POSITION"
 	}
+	start, end, pause := strings.ToUpper(s.StartKey), strings.ToUpper(s.EndKey), strings.ToUpper(s.PauseKey)
+	if s.Editing {
+		return "EDIT MODE  /  " + start + " TO PRACTICE"
+	}
 	if !s.Armed {
-		return "DISABLED  /  F9 TO ENABLE"
+		return "DISABLED  /  " + pause + " TO ENABLE"
 	}
 	if !s.Focused {
-		return "WAITING FOR APEX  /  F8 TO EDIT"
+		return "WAITING FOR APEX  /  " + end + " TO EDIT"
 	}
 	if s.Held && !s.Running {
 		return "RELEASE TO RESET"
 	}
-	return "F8 EDIT  /  F9 DISABLE"
+	return end + " EDIT  /  " + pause + " DISABLE"
 }
 func renderPractice(s Snapshot) error {
 	if practiceWindow == 0 {
@@ -155,13 +160,16 @@ func scoreSummary(score pattern.Score) string {
 	case made == 0:
 		return fmt.Sprintf("%d MISSED", score.Missed)
 	case score.Missed > 0:
-		return fmt.Sprintf("AVG %d ms / %d MISSED", score.AverageMS, score.Missed)
+		return fmt.Sprintf("TOTAL %d ms / %d MISSED", score.TotalMS, score.Missed)
 	}
-	return fmt.Sprintf("AVG %d ms", score.AverageMS)
+	return fmt.Sprintf("TOTAL %d ms", score.TotalMS)
 }
-func deviationLabel(change pattern.Change) string {
+func deviationLabel(change pattern.Change, compact bool) string {
 	if change.Missed {
 		return "MISS"
+	}
+	if compact {
+		return fmt.Sprintf("%+d", change.DeviationMS)
 	}
 	return fmt.Sprintf("%+d ms", change.DeviationMS)
 }
@@ -202,6 +210,13 @@ func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
 func (c canvas) face(size float64) font.Face {
 	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
 	return face
+}
+
+// width measures text in unscaled pixels.
+func (c canvas) width(size float64, text string) float64 {
+	face := c.face(size)
+	defer face.Close()
+	return float64(font.MeasureString(face, text).Ceil()) / c.scale
 }
 func (c canvas) centeredText(center, y, size float64, text string, col color.NRGBA) {
 	face, err := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
@@ -299,53 +314,63 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		box := image.Rect(int((x-size)*scale), int((arrowAnchorY-size)*scale), int((x+size)*scale), int((arrowAnchorY+size)*scale))
 		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
 	}
-	c.centeredText(center, 61, 9, practiceStatus(s), color.NRGBA{183, 196, 200, 210})
+	c.centeredText(center, 61, 11, practiceStatus(s), color.NRGBA{183, 196, 200, 210})
 	// Optionally clear the view while shooting; the timeline returns on release.
 	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
 	if s.Settings.Timeline && !firing {
-		w := math.Min(420, float64(width)/scale-44)
+		w := math.Min(float64(s.Settings.TimelineWidth), float64(width)/scale-44)
 		x := center - w/2
 		y := arrowAnchorY + size/2 + float64(s.Settings.TimelineOffset)
 		box := color.NRGBA{10, 17, 27, 215}
 		c.rect(x, y, w, timelineHeight, box)
-		c.text(x+12, y+17, 10, "R-301", text)
-		c.text(x+55, y+17, 8, "EXPECTED STRAFE", dim)
+		total := math.Max(1, float64(s.TotalMS))
+		c.text(x+12, y+19, 12, s.Weapon, text)
 		// Between sprays the last one stays up for review, with its score.
 		review := !s.Running && s.Score != nil
 		playheadMS := s.ElapsedMS
-		summary := fmt.Sprintf("%.2f / 2.21 s", float64(s.ElapsedMS)/1000)
+		summary := fmt.Sprintf("%.2f / %.2f s", float64(s.ElapsedMS)/1000, total/1000)
 		if review {
 			playheadMS = s.PlayerEndMS
 			summary = scoreSummary(*s.Score)
 		}
-		summaryFace := c.face(10)
-		c.text(x+w-12-float64(font.MeasureString(summaryFace, summary).Ceil())/scale, y+17, 10, summary, dim)
-		summaryFace.Close()
+		c.text(x+w-12-c.width(12, summary), y+19, 12, summary, dim)
+		// The mode gives way when a narrow timeline has no room for it.
+		if modeX := x + 12 + c.width(12, s.Weapon) + 9; modeX+c.width(10, s.Mode)+9 <= x+w-12-c.width(12, summary) {
+			c.text(modeX, y+19, 10, s.Mode, dim)
+		}
 		track := w - 24
-		offset := 0.0
-		durations := []float64{800, 530, 880}
-		labels := []string{"R  800 ms", "L  530 ms", "R  880 ms"}
 		// Each switch is a 3 px cut centred on its exact time. The same cut runs
 		// through the player's bar below, so the two rows line up.
 		const cut = 3.0
-		for i, duration := range durations {
-			from, to := x+12+offset, x+12+offset+track*duration/2210
+		narrowest, startMS := track, 0.0
+		for i, phase := range s.Phases {
+			duration := float64(phase.DurationMS)
+			from, to := x+12+track*startMS/total, x+12+track*(startMS+duration)/total
+			narrowest = math.Min(narrowest, to-from)
 			if i > 0 {
 				from += cut / 2
 			}
-			if i < len(durations)-1 {
+			if i < len(s.Phases)-1 {
 				to -= cut / 2
 			}
-			fill := color.NRGBA{32, 63, 56, 255}
-			accent := mint
-			if i == 1 {
-				fill = color.NRGBA{72, 49, 45, 255}
-				accent = coral
+			// Neutral phases (fire without strafing) are grey.
+			letter, fill, accent := "-", color.NRGBA{44, 54, 60, 255}, color.NRGBA{110, 125, 130, 255}
+			switch phase.Direction {
+			case "right":
+				letter, fill, accent = "R", color.NRGBA{32, 63, 56, 255}, mint
+			case "left":
+				letter, fill, accent = "L", color.NRGBA{72, 49, 45, 255}, coral
 			}
 			c.rect(from, y+30, to-from, 24, fill)
 			c.rect(from, y+30, to-from, 2, accent)
-			c.centeredText((from+to)/2, y+46, 10, labels[i], text)
-			offset += track * duration / 2210
+			// Short phases drop the duration, then the letter, rather than overflow.
+			for _, label := range []string{fmt.Sprintf("%s  %d ms", letter, phase.DurationMS), letter} {
+				if c.width(12, label) <= to-from-6 {
+					c.centeredText((from+to)/2, y+47, 12, label, text)
+					break
+				}
+			}
+			startMS += duration
 		}
 		// The player's own strafes, on the same time axis; grey is neutral.
 		c.rect(x+12, y+58, track, 24, color.NRGBA{38, 48, 54, 255})
@@ -358,35 +383,40 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			default:
 				continue
 			}
-			from := math.Min(track, track*float64(segment.StartMS)/2210)
-			to := math.Min(track, track*float64(segment.EndMS)/2210)
+			from := math.Min(track, track*float64(segment.StartMS)/total)
+			to := math.Min(track, track*float64(segment.EndMS)/total)
 			c.rect(x+12+from, y+58, to-from, 24, fill)
 		}
-		for _, dueMS := range []float64{800, 1330} {
-			c.rect(x+12+track*dueMS/2210-cut/2, y+58, cut, 24, box)
-		}
-		head := x + 12 + track*math.Min(1, float64(playheadMS)/2210)
-		c.rect(head-1, y+27, 2, 58, color.NRGBA{255, 255, 255, 255})
-		ticks := []struct {
-			atMS  int64
-			label string
-		}{{0, "0"}, {800, "0.80"}, {1330, "1.33"}}
-		for i, tick := range ticks {
-			label, col := tick.label, dim
+		head := x + 12 + track*math.Min(1, float64(playheadMS)/total)
+		// Tick labels sit under each phase start; in review they become deviations.
+		compact := narrowest < 56
+		startMS = 0
+		for i, phase := range s.Phases {
+			label, col := fmt.Sprintf("%.2f", startMS/1000), dim
+			if i == 0 {
+				label = "0"
+			} else {
+				c.rect(x+12+track*startMS/total-cut/2, y+58, cut, 24, box)
+			}
 			if review {
 				for _, change := range s.Score.Switches {
-					if change.AtMS == tick.atMS {
-						label, col = deviationLabel(change), deviationColor(change)
+					if change.AtMS == int64(startMS) {
+						label, col = deviationLabel(change, compact), deviationColor(change)
 					}
 				}
 			}
 			if i == 0 {
-				c.text(x+12, y+98, 8, label, col)
+				c.text(x+12, y+100, 10, label, col)
 			} else {
-				c.centeredText(x+12+track*float64(tick.atMS)/2210, y+98, 8, label, col)
+				c.centeredText(x+12+track*startMS/total, y+100, 10, label, col)
 			}
+			startMS += float64(phase.DurationMS)
 		}
-		c.text(x+w-34, y+98, 8, "2.21 s", dim)
+		c.rect(head-1, y+27, 2, 58, color.NRGBA{255, 255, 255, 255})
+		if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 56 {
+			end := fmt.Sprintf("%.2f s", total/1000)
+			c.text(x+w-12-c.width(10, end), y+100, 10, end, dim)
+		}
 	}
 	return img
 }

@@ -1,29 +1,77 @@
 import "./style.css";
 import { api, native, onState } from "./bridge";
+// Weapon icons are optional: a weapon without a file shows its name alone.
+const icons = Object.fromEntries(
+  Object.entries(
+    import.meta.glob("./assets/weapons/*.svg", {
+      eager: true,
+      query: "?url",
+      import: "default",
+    }),
+  ).map(([path, url]) => [path.match(/([^/]+)\.svg$/)[1], url]),
+);
+const glyphs = {
+  arrows: "M9 7 4 12l5 5M4 12h16M15 7l5 5-5 5",
+  timeline: "M3 7h8v4H3zM13 7h8v4h-8zM3 15h12v3H3zM17 4v17",
+  overlay: "M3 5h18v12H3zM12 8v6M9 11h6M8 21h8",
+  voice: "M4 10v4h3l5 4V6l-5 4zM16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10",
+  keys: "M3 7h18v10H3zM7 10.5h.01M11 10.5h.01M15 10.5h.01M8 13.5h8",
+  close: "M6 6l12 12M18 6 6 18",
+  chevron: "m6 9 6 6 6-6",
+};
+const icon = (name) =>
+  `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="${glyphs[name]}"/></svg>`;
+// A slider and a number field for the same setting.
+const sliders = {
+  gap: ["Spacing", 40, 300, 2, "px"],
+  arrowSize: ["Size", 24, 72, 2, "px"],
+  timelineOffset: ["Spacing", 12, 400, 2, "px"],
+  timelineWidth: ["Width", 280, 800, 4, "px"],
+  opacity: ["Opacity", 20, 100, 1, "%"],
+};
+const slider = (id) => {
+  const [label, min, max, step, unit] = sliders[id];
+  return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
+};
+const card = (name, title, toggle, body) =>
+  `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2>${body}</section>`;
+const bindings = {
+  left: "Strafe left",
+  right: "Strafe right",
+  start: "Start practice",
+  end: "End practice",
+  pause: "Disable / enable",
+};
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="quit" title="Close application">×</button></div></header>
- <main>
-  <section class="stage" aria-label="Strafe guidance">
-   <div class="alignment"><span></span><small>PREVIEW</small><span></span></div>
-   <div class="arrows"><div id="left" class="arrow left" aria-label="Strafe left"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 12 17 32l20 20M18 32h34"/></svg></div><div class="crosshair-guide" aria-hidden="true">+</div><div id="right" class="arrow right" aria-label="Strafe right"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="m27 12 20 20-20 20M46 32H12"/></svg></div></div>
-   <div id="timeline" class="timeline"><div class="timeline-top"><span>R-301 <small>EXPECTED STRAFE</small></span><span id="elapsed">0.00 / 2.21 s</span></div><div class="track"><div class="segment right-segment" style="flex:800"><span>R <small>800 ms</small></span></div><div class="segment left-segment" style="flex:530"><span>L <small>530 ms</small></span></div><div class="segment right-segment" style="flex:880"><span>R <small>880 ms</small></span></div><div id="playhead"></div></div><div id="player" class="player-track"></div><div class="ticks"><span>0</span><span>0.80</span><span>1.33</span><span>2.21 s</span></div></div>
+ <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><button id="quit" class="close" title="Close application" aria-label="Close application">${icon("close")}</button></header>
+ <main class="controls">
+  <section class="weapon-bar">
+   <button id="weapon-button" class="weapon-button" aria-haspopup="listbox" aria-expanded="false"><img id="weapon-icon" alt="" hidden><span class="weapon-text"><small>WEAPON</small><strong id="weapon-label"></strong></span>${icon("chevron")}</button>
+   <div id="modes" class="modes" role="radiogroup" aria-label="Firing mode"></div>
+   <div id="weapon-menu" class="weapon-menu" role="listbox" aria-label="Weapon" hidden></div>
   </section>
-  <section class="controls">
-   <div class="section-heading"><span>OVERLAY SETUP</span><span class="drag-hint">Drag the header · resize the window</span></div>
-   <div class="settings-grid">
-    <label>Arrow spacing <output id="gap-value"></output><input id="gap" type="range" min="40" max="300" step="2"></label>
-    <label>Arrow size <output id="arrowSize-value"></output><input id="arrowSize" type="range" min="24" max="72" step="2"></label>
-    <label>Opacity <output id="opacity-value"></output><input id="opacity" type="range" min="20" max="100"></label>
-    <label>Timeline spacing <output id="timelineOffset-value"></output><input id="timelineOffset" type="range" min="12" max="100" step="2"></label>
-   </div>
-   <div class="options-row"><label class="check"><input id="arrows-toggle" type="checkbox">Arrows</label><label class="check"><input id="timeline-toggle" type="checkbox">Timeline</label><label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide timeline while shooting</label><span class="keys" title="Keys read to draw your own strafes under the timeline">Strafe keys<button id="bind-left" class="mini"></button><button id="bind-right" class="mini"></button></span></div><div class="options-row second"><label class="check"><input id="voice-toggle" type="checkbox">Voice</label><label class="lead-label">Voice lead <input id="voiceLeadMs" type="number" min="0" max="350" step="10"><span>ms</span></label><span class="position-actions"><button id="move" class="mini" title="Show the overlay and drag it into place">Move overlay</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></span></div>
-   <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd>F8</kbd></button></div>
-   <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd>F8</kbd> edit / practice <span class="divider">·</span> <kbd>F9</kbd> disable / enable</p>
-   <p id="error" role="alert" hidden></p>
-  </section>
+  <div class="cards">
+   ${card("arrows", "Arrows", "arrows-toggle", slider("gap") + slider("arrowSize"))}
+   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide while shooting</label>`)}
+   ${card("overlay", "Overlay", "", slider("opacity") + `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay" class="mini"></button><button id="move" class="mini" title="Drag the overlay into place">Move</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></div>`)}
+   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="check" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><input id="voiceStart-toggle" type="checkbox">Opening cue</label>`)}
+   ${card(
+     "keys",
+     "Keys",
+     "",
+     `<div class="binds">${Object.entries(bindings)
+       .map(
+         ([id, label]) =>
+           `<div class="bind"><span>${label}</span><button id="bind-${id}" class="mini key"></button></div>`,
+       )
+       .join("")}</div>`,
+   )}
+  </div>
+  <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
+  <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span> <span class="divider">·</span> <kbd id="help-pause"></kbd> disable / enable</p>
+  <p id="error" role="alert" hidden></p>
  </main>
- <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><span class="version">R-301 · v0.1</span></footer>
- <div id="practice-status" class="practice-status"></div>
+ <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><span id="version" class="version"></span></footer>
 `;
 const $ = (id) => document.getElementById(id);
 let state,
@@ -36,150 +84,146 @@ function error(err) {
   $("error").hidden = false;
   $("error").textContent = String(err);
 }
-function scoreSummary(score) {
-  const made = score.switches.length - score.missed;
-  if (!score.switches.length) return "NO SWITCHES";
-  if (!made) return `${score.missed} MISSED`;
-  return score.missed
-    ? `AVG ${score.averageMs} ms / ${score.missed} MISSED`
-    : `AVG ${score.averageMs} ms`;
+let weapons = [];
+const categories = {
+  ar: "Assault rifles",
+  smg: "SMGs",
+  lmg: "LMGs",
+  pistol: "Pistols",
+};
+function closeMenu() {
+  $("weapon-menu").hidden = true;
+  $("weapon-button").setAttribute("aria-expanded", "false");
+}
+function fillWeapons(list) {
+  weapons = list;
+  const menu = $("weapon-menu");
+  menu.replaceChildren();
+  let group;
+  for (const weapon of list) {
+    if (group?.dataset.category !== weapon.category) {
+      const heading = document.createElement("h3");
+      heading.textContent = categories[weapon.category] || weapon.category;
+      group = document.createElement("div");
+      group.className = "weapon-group";
+      group.dataset.category = weapon.category;
+      menu.append(heading, group);
+    }
+    const option = document.createElement("button");
+    option.className = "weapon-option";
+    option.setAttribute("role", "option");
+    option.dataset.weapon = weapon.id;
+    if (icons[weapon.id]) {
+      const image = document.createElement("img");
+      image.src = icons[weapon.id];
+      image.alt = "";
+      option.append(image);
+    }
+    option.append(weapon.name);
+    option.onclick = () => {
+      closeMenu();
+      if (weapon.id === localSettings.weaponId) return;
+      change("weaponId", weapon.id);
+      change("modeId", weapon.modes[0].id);
+    };
+    group.append(option);
+  }
+  if (state) render(state);
+}
+function syncWeapon(config) {
+  const weapon = weapons.find((w) => w.id === config.weaponId);
+  if (!weapon) return;
+  $("weapon-label").textContent = weapon.name;
+  $("weapon-icon").hidden = !icons[weapon.id];
+  if (icons[weapon.id]) $("weapon-icon").src = icons[weapon.id];
+  for (const option of $("weapon-menu").querySelectorAll(".weapon-option"))
+    option.setAttribute("aria-selected", option.dataset.weapon === weapon.id);
+  const modes = $("modes");
+  if (modes.dataset.weapon !== weapon.id) {
+    modes.dataset.weapon = weapon.id;
+    modes.replaceChildren(
+      ...weapon.modes.map((mode) => {
+        const button = document.createElement("button");
+        button.className = "mini";
+        button.setAttribute("role", "radio");
+        button.dataset.mode = mode.id;
+        button.textContent = mode.name;
+        button.onclick = () => change("modeId", mode.id);
+        return button;
+      }),
+    );
+  }
+  modes.hidden = weapon.modes.length < 2;
+  for (const button of modes.children) {
+    const on = button.dataset.mode === config.modeId;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-checked", on);
+  }
 }
 function render(s) {
   state = s;
   if (!pending && !saving) localSettings = { ...s.settings };
   const config = localSettings || s.settings;
-  document.body.classList.toggle("practice", !s.editing);
-  document.documentElement.style.setProperty("--gap", `${config.gap}px`);
-  document.documentElement.style.setProperty(
-    "--arrow-size",
-    `${config.arrowSize}px`,
-  );
-  document.documentElement.style.setProperty(
-    "--overlay-opacity",
-    config.opacity / 100,
-  );
-  document.documentElement.style.setProperty(
-    "--timeline-offset",
-    `${config.timelineOffset}px`,
-  );
-  const controlsTop = Math.max(
-    275,
-    76 + 66 + config.arrowSize / 2 + config.timelineOffset + 128,
-  );
-  document.documentElement.style.setProperty(
-    "--controls-top",
-    `${controlsTop}px`,
-  );
-  document.documentElement.style.setProperty(
-    "--content-height",
-    `${controlsTop + 300}px`,
-  );
-  for (const id of ["gap", "arrowSize", "opacity", "timelineOffset"]) {
-    if (document.activeElement !== $(id)) $(id).value = config[id];
-    $(`${id}-value`).textContent =
-      `${config[id]}${id === "opacity" ? "%" : " px"}`;
-  }
+  for (const id in sliders)
+    for (const input of [$(id), $(`${id}-number`)])
+      if (document.activeElement !== input) input.value = config[id];
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
   $("arrows-toggle").checked = config.arrows;
-  $("left").parentElement.style.visibility = config.arrows
-    ? "visible"
-    : "hidden";
   $("timeline-toggle").checked = config.timeline;
   $("voice-toggle").checked = config.voice;
-  $("voiceLeadMs").disabled = !config.voice;
+  $("voiceStyle").value = config.voiceStyle;
+  $("voiceStart-toggle").checked = config.voiceStart;
   $("timelineIdle-toggle").checked = config.timelineIdle;
-  $("timelineIdle-toggle").disabled = !config.timeline;
-  $("timeline").hidden = !config.timeline;
-  $("left").classList.toggle(
-    "active",
-    s.direction === "left" && (s.armed || s.preview),
-  );
-  $("right").classList.toggle(
-    "active",
-    s.direction === "right" && (s.armed || s.preview),
-  );
-  // Between sprays the last one stays up for review, with its score.
-  const review = !s.running && s.score;
-  const playheadMs = review ? s.playerEndMs : s.elapsedMs;
-  $("elapsed").textContent = review
-    ? scoreSummary(s.score)
-    : `${(s.elapsedMs / 1000).toFixed(2)} / 2.21 s`;
-  $("playhead").style.left = `${Math.min(100, (playheadMs / 2210) * 100)}%`;
-  $("player").replaceChildren(
-    ...(s.player || [])
-      .filter((segment) => segment.direction)
-      .map((segment) => {
-        const bar = document.createElement("span");
-        bar.className = segment.direction;
-        bar.style.left = `${(segment.startMs / 2210) * 100}%`;
-        bar.style.width = `${((segment.endMs - segment.startMs) / 2210) * 100}%`;
-        return bar;
-      }),
-    // Cuts where each switch was due, continuing the gaps of the bar above.
-    ...[800, 1330].map((dueMs) => {
-      const mark = document.createElement("i");
-      mark.style.left = `${(dueMs / 2210) * 100}%`;
-      return mark;
-    }),
-  );
-  [
-    [0, "0"],
-    [800, "0.80"],
-    [1330, "1.33"],
-  ].forEach(([atMs, label], index) => {
-    const tick = document.querySelectorAll(".ticks span")[index];
-    const change = review && s.score.switches.find((c) => c.atMs === atMs);
-    tick.textContent = !change
-      ? label
-      : change.missed
-        ? "MISS"
-        : `${change.deviationMs > 0 ? "+" : ""}${change.deviationMs} ms`;
-    const off = change ? Math.abs(change.deviationMs) : 0;
-    tick.className = !change
-      ? ""
-      : change.missed || off > 100
-        ? "off"
-        : off > 40
-          ? "close"
-          : "good";
-  });
-  for (const side of ["left", "right"]) {
-    $(`bind-${side}`).textContent =
-      s.binding === side ? "press a key…" : s[`${side}Key`] || "?";
-    $(`bind-${side}`).classList.toggle("active", s.binding === side);
+  // A switched-off category keeps its settings but greys them out.
+  for (const [name, on] of [
+    ["arrows", config.arrows],
+    ["timeline", config.timeline],
+    ["voice", config.voice],
+  ])
+    for (const control of document.querySelectorAll(
+      `.card.${name} :is(input, select):not(.switch)`,
+    ))
+      control.disabled = !on;
+  $("version").textContent = `${s.weapon} · v0.1`;
+  syncWeapon(config);
+  for (const id in bindings) {
+    $(`bind-${id}`).textContent =
+      s.binding === id ? "press a key…" : s[`${id}Key`] || "?";
+    $(`bind-${id}`).classList.toggle("active", s.binding === id);
   }
+  $("lock-key").textContent = s.startKey;
+  $("help-start").textContent = s.startKey;
+  $("help-toggle").textContent =
+    s.startKey === s.endKey ? "edit / practice" : `practice, ${s.endKey} edit`;
+  $("help-pause").textContent = s.pauseKey;
   $("preview").textContent =
     s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
-  $("move").textContent = s.moving ? "Done moving" : "Move overlay";
+  $("showOverlay").textContent = s.shown ? "Hide" : "Show";
+  $("move").textContent = s.moving ? "Done" : "Move";
   $("move").classList.toggle("active", s.moving);
   $("lock").disabled = !s.inputReady || saving || pending;
   let status = !native
     ? "Browser preview · global input unavailable"
     : !s.inputReady
       ? "Input unavailable"
-      : !s.armed
-        ? "Paused · F9 to resume"
-        : s.moving
-          ? "Drag the overlay onto your crosshair"
-          : s.editing
-            ? "Edit mode · adjust your overlay"
-            : !s.focused
-              ? "Waiting for Apex Legends"
-              : s.running
-                ? "Follow the highlighted arrow"
-                : s.held
-                  ? "Pattern complete · release to reset"
-                  : "Ready · hold left-click";
+      : s.binding
+        ? "Press an unused key · Esc cancels"
+        : !s.armed
+          ? `Paused · ${s.pauseKey} to resume`
+          : s.moving
+            ? "Drag the overlay onto your crosshair"
+            : s.editing
+              ? "Edit mode · adjust your overlay"
+              : !s.focused
+                ? "Waiting for Apex Legends"
+                : s.running
+                  ? "Follow the highlighted arrow"
+                  : s.held
+                    ? "Pattern complete · release to reset"
+                    : "Ready · hold left-click";
   $("status").textContent = status;
   $("status-dot").classList.toggle("live", s.inputReady && s.armed);
-  $("practice-status").textContent = !s.armed
-    ? "DISABLED · F9 TO ENABLE"
-    : !s.focused
-      ? "WAITING FOR APEX · F8 TO EDIT"
-      : s.held && !s.running
-        ? "RELEASE TO RESET"
-        : "F8 EDIT · F9 DISABLE";
   $("error").hidden = !s.error;
   if (s.error) $("error").textContent = s.error;
 }
@@ -213,26 +257,51 @@ function change(key, value) {
   clearTimeout(debounce);
   debounce = setTimeout(() => flushSettings().catch(error), 180);
 }
-for (const key of ["gap", "arrowSize", "opacity", "timelineOffset"])
+const clamped = (input) =>
+  Math.max(
+    Number(input.min),
+    Math.min(Number(input.max), Math.round(Number(input.value)) || 0),
+  );
+for (const key in sliders) {
   $(key).addEventListener("input", (e) => change(key, Number(e.target.value)));
-$("voiceLeadMs").addEventListener("change", (e) =>
-  change(
-    "voiceLeadMs",
-    Math.max(0, Math.min(350, Number(e.target.value) || 0)),
-  ),
+  // Typed values apply once complete, so a half-typed number is not clamped.
+  $(`${key}-number`).addEventListener("change", (e) => {
+    e.target.value = clamped(e.target);
+    change(key, Number(e.target.value));
+  });
+}
+$("voiceLeadMs").addEventListener("change", (e) => {
+  e.target.value = clamped(e.target);
+  change("voiceLeadMs", Number(e.target.value));
+});
+for (const [id, key] of [
+  ["arrows-toggle", "arrows"],
+  ["timeline-toggle", "timeline"],
+  ["timelineIdle-toggle", "timelineIdle"],
+  ["voiceStart-toggle", "voiceStart"],
+  ["voice-toggle", "voice"],
+])
+  $(id).addEventListener("change", (e) => change(key, e.target.checked));
+$("voiceStyle").addEventListener("change", (e) =>
+  change("voiceStyle", e.target.value),
 );
-$("arrows-toggle").addEventListener("change", (e) =>
-  change("arrows", e.target.checked),
-);
-$("timeline-toggle").addEventListener("change", (e) =>
-  change("timeline", e.target.checked),
-);
-$("timelineIdle-toggle").addEventListener("change", (e) =>
-  change("timelineIdle", e.target.checked),
-);
-$("voice-toggle").addEventListener("change", (e) =>
-  change("voice", e.target.checked),
-);
+$("weapon-button").onclick = () => {
+  const open = $("weapon-menu").hidden;
+  $("weapon-menu").hidden = !open;
+  $("weapon-button").setAttribute("aria-expanded", open);
+};
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".weapon-bar")) closeMenu();
+});
+// Flushes pending settings, then runs a command that returns the new state.
+const command = (name) => async () => {
+  try {
+    await flushSettings();
+    render(await api[name]());
+  } catch (e) {
+    error(e);
+  }
+};
 $("preview").onclick = async () => {
   try {
     await flushSettings();
@@ -242,32 +311,21 @@ $("preview").onclick = async () => {
     error(e);
   }
 };
-$("lock").onclick = async () => {
-  try {
-    await flushSettings();
-    render(await api.ToggleMode());
-  } catch (e) {
-    error(e);
-  }
-};
-for (const side of ["left", "right"])
-  $(`bind-${side}`).onclick = (e) => {
+$("lock").onclick = command("ToggleMode");
+$("move").onclick = command("ToggleMove");
+$("showOverlay").onclick = command("ToggleOverlay");
+$("centerOverlay").onclick = command("CenterOverlay");
+for (const id in bindings)
+  $(`bind-${id}`).onclick = (e) => {
     e.target.blur(); // so Space or Enter can be bound without re-clicking
-    api.BindKey(side).then(render).catch(error);
+    api.BindKey(id).then(render).catch(error);
   };
-$("move").onclick = async () => {
-  try {
-    await flushSettings();
-    render(await api.ToggleMove());
-  } catch (e) {
-    error(e);
-  }
-};
-$("centerOverlay").onclick = () =>
-  api.CenterOverlay().then(render).catch(error);
 $("quit").onclick = () => api.Quit().catch(error);
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Escape" && state?.preview) api.StopPreview().catch(error);
+  if (e.code !== "Escape") return;
+  closeMenu();
+  if (state?.preview) api.StopPreview().catch(error);
 });
 onState(render);
 api.GetState().then(render).catch(error);
+api.Weapons().then(fillWeapons).catch(error);

@@ -38,6 +38,14 @@ export function ToggleMove() {
   return window['go']['main']['App']['ToggleMove']();
 }
 
+export function ToggleOverlay() {
+  return window['go']['main']['App']['ToggleOverlay']();
+}
+
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
+}
+
+export function Weapons() {
+  return window['go']['main']['App']['Weapons']();
 }

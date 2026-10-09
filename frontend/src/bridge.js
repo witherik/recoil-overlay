@@ -7,8 +7,22 @@ const phases = [
   { direction: "left", durationMs: 530 },
   { direction: "right", durationMs: 880 },
 ];
+const mode = (id, name) => ({ id, name, phases });
+const weapons = [
+  { id: "havoc", name: "HAVOC", category: "ar" },
+  { id: "r301", name: "R-301", category: "ar" },
+  { id: "r99", name: "R-99", category: "smg" },
+].map((weapon) => ({
+  ...weapon,
+  modes:
+    weapon.id === "havoc"
+      ? [mode("normal", "Normal"), mode("turbocharged", "Turbocharged")]
+      : [mode("default", "Default")],
+}));
 const mock = {
   settings: {
+    weaponId: "r301",
+    modeId: "default",
     gap: 100,
     arrowSize: 42,
     opacity: 90,
@@ -16,10 +30,15 @@ const mock = {
     timeline: true,
     timelineIdle: false,
     timelineOffset: 32,
+    timelineWidth: 420,
     voice: true,
+    voiceStyle: "fast",
+    voiceStart: false,
     voiceLeadMs: 75,
   },
   phases,
+  weapon: "R-301",
+  mode: "EXPECTED STRAFE",
   editing: true,
   armed: true,
   focused: false,
@@ -27,6 +46,7 @@ const mock = {
   running: false,
   preview: false,
   moving: false,
+  shown: true,
   held: false,
   elapsedMs: 0,
   totalMs: 2210,
@@ -39,6 +59,9 @@ const mock = {
   score: null,
   leftKey: "A",
   rightKey: "D",
+  startKey: "F8",
+  endKey: "F8",
+  pauseKey: "F9",
   binding: "",
 };
 let listener, timer, started, nextCue;
@@ -61,15 +84,18 @@ function emit() {
 }
 const browserAPI = {
   GetState: async () => structuredClone(mock),
+  Weapons: async () => weapons,
   UpdateSettings: async (s) => {
     stop();
     mock.settings = { ...s };
+    mock.weapon = weapons.find((w) => w.id === s.weaponId).name;
     return emit();
   },
   Preview: async () => {
     stop();
     mock.running = true;
     mock.preview = true;
+    mock.shown = true;
     mock.runId++;
     started = performance.now();
     nextCue = 0;
@@ -90,7 +116,7 @@ const browserAPI = {
               : -1;
       mock.direction = phases[mock.phase]?.direction || "";
       while (nextCue < 3 && mock.elapsedMs >= cueTimes[nextCue]) {
-        if (mock.settings.voice) {
+        if (mock.settings.voice && (nextCue > 0 || mock.settings.voiceStart)) {
           const sound = sounds[phases[nextCue].direction];
           sound.currentTime = 0;
           sound.play().catch(() => {});
@@ -120,6 +146,14 @@ const browserAPI = {
   },
   ToggleMove: async () => {
     mock.moving = !mock.moving;
+    return emit();
+  },
+  ToggleOverlay: async () => {
+    mock.shown = !mock.shown;
+    if (!mock.shown) {
+      stop();
+      mock.moving = false;
+    }
     return emit();
   },
   CenterOverlay: async () => emit(),

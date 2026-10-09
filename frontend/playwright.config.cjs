@@ -5,7 +5,7 @@ module.exports = defineConfig({
     baseURL: "http://127.0.0.1:4178",
     channel: "chrome",
     headless: true,
-    viewport: { width: 620, height: 600 },
+    viewport: { width: 640, height: 720 },
   },
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4178 --strictPort",

@@ -29,8 +29,6 @@ var rawData = user32.NewProc("GetRawInputData")
 var getMessage = user32.NewProc("GetMessageW")
 var dispatchMessage = user32.NewProc("DispatchMessageW")
 var postThreadMessage = user32.NewProc("PostThreadMessageW")
-var registerHotKey = user32.NewProc("RegisterHotKey")
-var unregisterHotKey = user32.NewProc("UnregisterHotKey")
 var foregroundWindow = user32.NewProc("GetForegroundWindow")
 var windowText = user32.NewProc("GetWindowTextW")
 var windowPID = user32.NewProc("GetWindowThreadProcessId")
@@ -40,7 +38,7 @@ var setWindowLong = user32.NewProc("SetWindowLongPtrW")
 var setWindowPos = user32.NewProc("SetWindowPos")
 var playSound = windows.NewLazySystemDLL("winmm.dll").NewProc("PlaySoundW")
 
-// Both slices remain rooted for the entire process lifetime (async PlaySound).
+// Every clip remains rooted for the entire process lifetime (async PlaySound).
 //
 //go:embed assets/voice/left.wav
 var voiceLeft []byte
@@ -48,10 +46,50 @@ var voiceLeft []byte
 //go:embed assets/voice/right.wav
 var voiceRight []byte
 
-func playVoice(direction string) {
-	clip := voiceRight
+//go:embed assets/voice/natural/left.wav
+var naturalLeft []byte
+
+//go:embed assets/voice/natural/right.wav
+var naturalRight []byte
+
+// The tones are synthesized: a low beep for left, an octave higher for right.
+var toneLeft, toneRight = toneClip(440), toneClip(880)
+
+// toneClip is a 60 ms sine beep as a mono PCM16 WAV, faded so it does not click.
+func toneClip(hz float64) []byte {
+	const rate, samples, fade = 22050, 22050 * 60 / 1000, 110
+	clip := make([]byte, 44+samples*2)
+	copy(clip, "RIFF")
+	binary.LittleEndian.PutUint32(clip[4:], uint32(len(clip)-8))
+	copy(clip[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(clip[16:], 16)
+	binary.LittleEndian.PutUint16(clip[20:], 1) // PCM
+	binary.LittleEndian.PutUint16(clip[22:], 1) // mono
+	binary.LittleEndian.PutUint32(clip[24:], rate)
+	binary.LittleEndian.PutUint32(clip[28:], rate*2)
+	binary.LittleEndian.PutUint16(clip[32:], 2)
+	binary.LittleEndian.PutUint16(clip[34:], 16)
+	copy(clip[36:], "data")
+	binary.LittleEndian.PutUint32(clip[40:], samples*2)
+	for i := 0; i < samples; i++ {
+		gain := math.Min(1, math.Min(float64(i+1), float64(samples-i))/fade)
+		value := 0.6 * 32767 * gain * math.Sin(2*math.Pi*hz*float64(i)/rate)
+		binary.LittleEndian.PutUint16(clip[44+2*i:], uint16(int16(value)))
+	}
+	return clip
+}
+
+func playVoice(style, direction string) {
+	left, right := voiceLeft, voiceRight
+	switch style {
+	case "natural":
+		left, right = naturalLeft, naturalRight
+	case "tones":
+		left, right = toneLeft, toneRight
+	}
+	clip := right
 	if direction == "left" {
-		clip = voiceLeft
+		clip = left
 	}
 	playSound.Call(uintptr(unsafe.Pointer(&clip[0])), 0, 0x0001|0x0002|0x0004) // ASYNC | NODEFAULT | MEMORY
 	runtime.KeepAlive(clip)
@@ -68,10 +106,20 @@ type inputEvent struct {
 	Down   bool
 }
 
-// The listener forwards only these two keys, or the next key pressed while a
-// binding is being captured. Every other keystroke is dropped unread.
-var strafeLeftCode, strafeRightCode atomic.Uint32
+// The listener forwards only the bound keys (two strafe keys, three hotkeys),
+// or the next key pressed while a binding is being captured. Every other
+// keystroke is dropped unread.
+var watchedKeys [5]atomic.Uint32
 var captureKey atomic.Bool
+
+func watched(code uint32) bool {
+	for i := range watchedKeys {
+		if watchedKeys[i].Load() == code {
+			return true
+		}
+	}
+	return false
+}
 
 // keyName returns the label Windows prints on the key with this scan code.
 func keyName(code int) string {
@@ -136,14 +184,6 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 			}
 			registerRaw.Call(uintptr(unsafe.Pointer(&devices[0])), 2, unsafe.Sizeof(devices[0]))
 		}()
-		for i, key := range []uintptr{0x77, 0x78} { // F8 / F9; MOD_NOREPEAT
-			ok, _, err = registerHotKey.Call(hwnd, uintptr(i+1), 0x4000, key)
-			if ok == 0 {
-				ready <- fmt.Errorf("F%d is already in use; close the conflicting app and restart: %w", i+8, err)
-				return
-			}
-			defer unregisterHotKey.Call(hwnd, uintptr(i+1))
-		}
 		ready <- nil
 		var msg winMessage
 		for {
@@ -154,13 +194,6 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 			}
 			if result == 0 {
 				return
-			}
-			if msg.Message == 0x0312 {
-				kind := "toggle"
-				if msg.WParam == 2 {
-					kind = "pause"
-				}
-				events <- inputEvent{Kind: kind, At: time.Now()}
 			}
 			if msg.Message == 0x00FF {
 				at := time.Now()
@@ -178,7 +211,7 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 							code |= 0xE000 // extended key (arrows, right-hand modifiers)
 						}
 						down := flags&1 == 0
-						if code == strafeLeftCode.Load() || code == strafeRightCode.Load() || (down && captureKey.Load()) {
+						if watched(code) || (down && captureKey.Load()) {
 							events <- inputEvent{Kind: "key", At: at, Code: int(code), Down: down}
 						}
 					}
@@ -248,6 +281,7 @@ var practicePlaced bool
 const (
 	overlayHidden = iota
 	overlayPractice
+	overlayPreview // as in practice, but beside the settings window
 	overlayMove
 )
 
@@ -407,17 +441,20 @@ func setOverlayMode(mode int, s Settings) error {
 	}
 	placeOverlay(s)
 	extended, _, _ := getWindowLong.Call(practiceWindow, ^uintptr(19))
-	if mode == overlayPractice {
-		extended |= 0x20 | 0x08000000 // click-through, never focused
-	} else {
+	if mode == overlayMove {
 		extended &^= 0x20 | 0x08000000
+	} else {
+		extended |= 0x20 | 0x08000000 // click-through, never focused
 	}
 	setWindowLong.Call(practiceWindow, ^uintptr(19), extended)
 	showWindow.Call(practiceWindow, 4) // SW_SHOWNOACTIVATE; invisible until the first frame
 	// Above the settings panel too, so the overlay is never hidden behind it.
 	setWindowPos.Call(practiceWindow, ^uintptr(0), 0, 0, 0, 0, 0x0001|0x0002|0x0010)
-	if mode == overlayPractice {
+	switch mode {
+	case overlayPractice:
 		showAsync.Call(mainWindow, 0)
+	case overlayPreview:
+		showAsync.Call(mainWindow, 5)
 	}
 	return nil
 }

@@ -17,18 +17,21 @@ type Change struct {
 	Missed      bool   `json:"missed"`
 }
 
-// Score summarises a spray. AverageMS is the mean absolute deviation of the
+// Score summarises a spray. TotalMS is the summed absolute deviation of the
 // switches the player made; missed switches are counted separately.
 type Score struct {
-	Switches  []Change `json:"switches"`
-	AverageMS int      `json:"averageMs"`
-	Missed    int      `json:"missed"`
+	Switches []Change `json:"switches"`
+	TotalMS  int      `json:"totalMs"`
+	Missed   int      `json:"missed"`
 }
 
 // Evaluate scores the player's strafes against phases for a spray that ended
 // at endMS. Each phase start is a switch, matched to the nearest moment the
 // player began strafing that way within half a phase either side. Switches the
 // spray ended too early to judge are left out, as are neutral phases.
+//
+// A neutral phase accepts any input, so the switch that follows it cannot be
+// early: already strafing the right way when it arrives counts as on time.
 func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 	score := Score{Switches: []Change{}}
 	var at, total int64
@@ -52,6 +55,7 @@ func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 		}
 		to := at + int64(phase.DurationMS)/2
 
+		afterNeutral := i > 0 && phases[i-1].Direction == ""
 		found, best := false, int64(0)
 		for _, segment := range player {
 			if segment.Direction != phase.Direction {
@@ -59,6 +63,10 @@ func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 			}
 			deviation := segment.StartMS - at
 			switch {
+			case afterNeutral && segment.StartMS <= at && segment.EndMS > at:
+				deviation = 0
+			case afterNeutral && segment.StartMS < at:
+				continue // a strafe that ended during the neutral phase says nothing
 			case segment.StartMS >= from && segment.StartMS <= to:
 			case segment.StartMS > previous && segment.StartMS < from && segment.EndMS > at:
 				// Switched during the previous phase, before the window opened.
@@ -81,7 +89,7 @@ func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 		}
 	}
 	if made := len(score.Switches) - score.Missed; made > 0 {
-		score.AverageMS = int((total + int64(made)/2) / int64(made))
+		score.TotalMS = int(total)
 	}
 	return score
 }
