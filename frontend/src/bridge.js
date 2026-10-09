@@ -2,11 +2,20 @@ import { EventsOn, WindowMinimise } from "../wailsjs/runtime/runtime";
 import leftURL from "../../assets/voice/left.wav?url";
 import rightURL from "../../assets/voice/right.wav?url";
 export const native = Boolean(window.go?.main?.App);
+
+// Outside the Windows app (vite dev, the Playwright tests) there is no Go
+// side. This stand-in keeps the settings window working there: it holds the
+// settings and can play a preview of one pattern, with nothing behind it.
 const phases = [
   { direction: "right", durationMs: 800 },
   { direction: "left", durationMs: 530 },
   { direction: "right", durationMs: 880 },
 ];
+// When each phase begins, and when the last one ends.
+const starts = phases.map((_, i) =>
+  phases.slice(0, i).reduce((ms, phase) => ms + phase.durationMs, 0),
+);
+const totalMs = starts.at(-1) + phases.at(-1).durationMs;
 const mode = (id, name) => ({ id, name, phases });
 const weapons = [
   { id: "havoc", name: "HAVOC", category: "ar" },
@@ -50,7 +59,7 @@ const mock = {
   shown: true,
   held: false,
   elapsedMs: 0,
-  totalMs: 2210,
+  totalMs,
   phase: 0,
   direction: "right",
   runId: 0,
@@ -101,23 +110,21 @@ const browserAPI = {
     mock.runId++;
     started = performance.now();
     nextCue = 0;
-    const cueTimes = [
-      0,
-      800 - mock.settings.voiceLeadMs,
-      1330 - mock.settings.voiceLeadMs,
-    ];
     timer = setInterval(() => {
-      mock.elapsedMs = Math.min(2210, Math.floor(performance.now() - started));
-      mock.phase =
-        mock.elapsedMs < 800
-          ? 0
-          : mock.elapsedMs < 1330
-            ? 1
-            : mock.elapsedMs < 2210
-              ? 2
-              : -1;
+      mock.elapsedMs = Math.min(
+        totalMs,
+        Math.floor(performance.now() - started),
+      );
+      const done = mock.elapsedMs >= totalMs;
+      mock.phase = done
+        ? -1
+        : starts.findLastIndex((at) => mock.elapsedMs >= at);
       mock.direction = phases[mock.phase]?.direction || "";
-      while (nextCue < 3 && mock.elapsedMs >= cueTimes[nextCue]) {
+      // Each cue leads its phase; the first cannot, and is opt-in.
+      while (
+        nextCue < phases.length &&
+        mock.elapsedMs >= starts[nextCue] - mock.settings.voiceLeadMs
+      ) {
         if (mock.settings.voice && (nextCue > 0 || mock.settings.voiceStart)) {
           const sound = sounds[phases[nextCue].direction];
           sound.currentTime = 0;
@@ -125,7 +132,7 @@ const browserAPI = {
         }
         nextCue++;
       }
-      if (mock.elapsedMs >= 2210) {
+      if (done) {
         clearInterval(timer);
         mock.running = false;
       }
@@ -142,8 +149,8 @@ const browserAPI = {
       "Open the Windows app to use global input and click-through mode.";
     return emit();
   },
-  BindKey: async (side) => {
-    mock.binding = mock.binding === side ? "" : side;
+  BindKey: async (action) => {
+    mock.binding = mock.binding === action ? "" : action;
     return emit();
   },
   ToggleMove: async () => {
@@ -165,7 +172,10 @@ const browserAPI = {
     return emit();
   },
   CenterOverlay: async () => emit(),
-  SavePosition: async () => {},
+  DismissError: async () => {
+    mock.error = "";
+    return emit();
+  },
   Quit: async () => {},
 };
 // Minimising keeps the app in the taskbar and hides the overlay preview.

@@ -36,12 +36,9 @@ func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 	score := Score{Switches: []Change{}}
 	var at, total int64
 	for i, phase := range phases {
-		at += func() int64 {
-			if i == 0 {
-				return 0
-			}
-			return int64(phases[i-1].DurationMS)
-		}()
+		if i > 0 {
+			at += int64(phases[i-1].DurationMS)
+		}
 		if at > endMS {
 			break
 		}
@@ -88,9 +85,7 @@ func Evaluate(phases []Phase, player []Segment, endMS int64) Score {
 			score.Missed++
 		}
 	}
-	if made := len(score.Switches) - score.Missed; made > 0 {
-		score.TotalMS = int(total)
-	}
+	score.TotalMS = int(total)
 	return score
 }
 

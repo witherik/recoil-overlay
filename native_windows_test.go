@@ -41,8 +41,8 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	mainWindow, practiceWindow = 0, overlay
 	defer func() { mainWindow, practiceWindow, practiceFrameValid = 0, 0, false }()
 	isVisible := user32.NewProc("IsWindowVisible")
-	windowRect := func() (rect struct{ Left, Top, Right, Bottom int32 }) {
-		user32.NewProc("GetWindowRect").Call(overlay, uintptr(unsafe.Pointer(&rect)))
+	windowRect := func() (rect windows.Rect) {
+		getWindowRect.Call(overlay, uintptr(unsafe.Pointer(&rect)))
 		return
 	}
 	s := Snapshot{Settings: defaultSettings(), Armed: true, Direction: "right"}
@@ -52,8 +52,8 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	if err := renderPractice(s); err != nil {
 		t.Fatal(err)
 	}
-	style, _, _ := getWindowLong.Call(overlay, ^uintptr(19))
-	if style&(0x80000|0x20|0x08000000) != (0x80000 | 0x20 | 0x08000000) {
+	style, _, _ := getWindowLong.Call(overlay, gwlExStyle)
+	if style&(wsExLayered|clickThrough) != wsExLayered|clickThrough {
 		t.Fatal("missing layered/click-through/noactivate flags")
 	}
 	centred := windowRect()
@@ -68,8 +68,8 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	if err := setOverlayMode(overlayPreview, s.Settings); err != nil {
 		t.Fatal(err)
 	}
-	style, _, _ = getWindowLong.Call(overlay, ^uintptr(19))
-	if visible, _, _ := isVisible.Call(overlay); visible == 0 || style&0x20 == 0 || practiceRect != centred {
+	style, _, _ = getWindowLong.Call(overlay, gwlExStyle)
+	if visible, _, _ := isVisible.Call(overlay); visible == 0 || style&wsExTransparent == 0 || practiceRect != centred {
 		t.Fatalf("preview: style %#x, rect %+v", style, practiceRect)
 	}
 	// Move mode takes the mouse and honours the saved offset.
@@ -80,11 +80,11 @@ func TestNativeLayeredWindowRoundTrip(t *testing.T) {
 	if err := renderPractice(s); err != nil {
 		t.Fatal(err)
 	}
-	style, _, _ = getWindowLong.Call(overlay, ^uintptr(19))
-	if moved := windowRect(); style&0x20 != 0 || moved.Left != centred.Left+30 || moved.Top != centred.Top-20 {
+	style, _, _ = getWindowLong.Call(overlay, gwlExStyle)
+	if moved := windowRect(); style&wsExTransparent != 0 || moved.Left != centred.Left+30 || moved.Top != centred.Top-20 {
 		t.Fatalf("move mode: style %#x, rect %+v", style, moved)
 	}
-	hit, _, _ := user32.NewProc("SendMessageW").Call(overlay, 0x0084, 0, 0)
+	hit, _, _ := user32.NewProc("SendMessageW").Call(overlay, wmNCHitTest, 0, 0)
 	if hit != 1 {
 		t.Fatalf("move mode hit test = %d, want client", hit)
 	}

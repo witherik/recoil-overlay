@@ -12,15 +12,6 @@ type Cue struct {
 	Direction string
 }
 
-// R301 returns the standard three-phase R-301 timing pattern.
-func R301() []Phase {
-	return []Phase{
-		{Direction: "right", DurationMS: 800},
-		{Direction: "left", DurationMS: 530},
-		{Direction: "right", DurationMS: 880},
-	}
-}
-
 // TotalMS returns the sum of the phase durations.
 func TotalMS(phases []Phase) int {
 	total := 0
@@ -50,25 +41,14 @@ func At(phases []Phase, elapsedMS int64) (index int, direction string, done bool
 	return -1, "", true
 }
 
-// Cues returns a cue at time zero for the first phase and one for every later
-// phase at its boundary minus leadMS. Later cues are clamped to time zero.
+// Cues returns one cue per phase, leadMS before the phase starts and never
+// before time zero.
 func Cues(phases []Phase, leadMS int) []Cue {
-	if len(phases) == 0 {
-		return nil
-	}
 	cues := make([]Cue, 0, len(phases))
-	cues = append(cues, Cue{AtMS: 0, Direction: phases[0].Direction})
-	var boundary int64
-	for i, phase := range phases {
-		boundary += int64(phase.DurationMS)
-		if i == 0 {
-			continue
-		}
-		at := boundary - int64(phase.DurationMS) - int64(leadMS)
-		if at < 0 {
-			at = 0
-		}
-		cues = append(cues, Cue{AtMS: at, Direction: phase.Direction})
+	var start int64
+	for _, phase := range phases {
+		cues = append(cues, Cue{AtMS: max(start-int64(leadMS), 0), Direction: phase.Direction})
+		start += int64(phase.DurationMS)
 	}
 	return cues
 }

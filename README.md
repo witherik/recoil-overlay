@@ -4,9 +4,9 @@ Recoil Practice is a Windows overlay for practicing the strafe rhythm of Apex Le
 
 ## Run
 
-Open `build/bin/recoil-overlay.exe` on Windows 10/11 (64-bit), with the Microsoft Edge WebView2 runtime installed. The overlay appears straight away, centered on the Apex window, so you can adjust it while looking at the real thing. Try **Preview pattern**, use **Move overlay** if the position needs adjusting, then press **F8** to practice. Use Apex in borderless windowed mode. F8 returns to the editable controls.
+Open `build/bin/recoil-overlay.exe` on Windows 10/11 (64-bit), with the Microsoft Edge WebView2 runtime installed. The overlay appears straight away, centered on the Apex window, so you can adjust it while looking at the real thing. Try **Preview pattern**, use **Move** if the position needs adjusting, then press **F8** to practice. Use Apex in borderless windowed mode. F8 returns to the editable controls.
 
-The repository also contains old upstream superglide binaries; use **recoil-overlay.exe**, not those files. Recoil Practice needs no separate input server or administrator privileges.
+Recoil Practice needs no separate input server or administrator privileges.
 
 ## Pattern and controls
 
@@ -42,7 +42,7 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
 - **F8** switches between edit mode and practice mode. Practice mode minimises the settings window to the taskbar and starts reading your clicks; press F8 again to edit.
 - **Keys** sets the strafe keys and the three practice keys: click one, then press the key; Escape cancels. **Start practice** and **End practice** are both F8 by default, which makes it a toggle; give them different keys to have one key that only starts and one that only ends. **Disable / enable** is F9. A key already used by another action is refused. The names below use the defaults.
 - **Overlay: Hide / Show** removes the overlay from the screen while you edit, or brings it back. In edit mode it is the same click-through window as in practice, in the same place, and it follows every setting as you change it. Practice mode always shows it, and the app starts with it shown.
-- **Move overlay** gives the overlay a backdrop so you can drag it into place; **Done moving** makes it click-through again. The position is saved as an offset from the middle of the Apex window (or of the current monitor when Apex is not running), so it follows resolution changes. The first run starts centered, and **Center** resets it. Use this to correct the placement on mixed-DPI setups.
+- **Move** (in the Overlay card) gives the overlay a backdrop so you can drag it into place; **Done** makes it click-through again. The position is saved as an offset from the middle of the Apex window (or of the current monitor when Apex is not running), so it follows resolution changes. The first run starts centered, and **Center** resets it. Use this to correct the placement on mixed-DPI setups.
 - **Timeline** has its own switch, a spacing from the arrows (−800 to 800 px; a negative value puts the timeline above the arrows, and the status line then moves below them) and a width (280 to 800 px). **Hide while shooting** keeps it visible between sprays but removes it from the overlay while left-click is held.
 - **Colors** (in the Overlay card) picks the colour scheme for both the settings window and the overlay: Green & orange (default), Purple & yellow, or Blue & red. The first colour of each pair is "right" on the overlay and the accent in the window; the second is "left". Blue & red is the pair chosen to stay apart under colour blindness.
 - **Reset defaults**, at the bottom of the window, puts every setting, key and the overlay position back to its default after a second click. The settings window keeps its place.
@@ -111,7 +111,7 @@ Browser layout and frontend checks have been verified. The native desktop/game p
 
 ## Rendering status
 
-The Wails window provides the editable settings UI. Go draws the arrows and timeline into a per-pixel alpha bitmap in a separate native layered window with its own saved position; edit mode shows that same window as its preview, and practice minimises the settings window. The settings window stays where you left it. Windows layered-window flags provide click-through. A separate native window is required because the transparent Wails window is created with `WS_EX_NOREDIRECTIONBITMAP`, which Windows will not combine with `WS_EX_LAYERED`. If the input listener or native renderer fails, the app attempts to restore edit mode and shows an error.
+The Wails window provides the editable settings UI. Go draws the arrows and timeline into a per-pixel alpha bitmap in a separate native layered window with its own saved position; edit mode shows that same window as its preview, and practice minimises the settings window. The settings window stays where you left it. Windows layered-window flags provide click-through. A separate native window is required because the transparent Wails window is created with `WS_EX_NOREDIRECTIONBITMAP`, which Windows will not combine with `WS_EX_LAYERED`. If the input listener or native renderer fails, the app attempts to restore edit mode and shows an error. An error stays at the bottom of the settings window until you click it away.
 
 Automated Windows tests verify input registration cleanup, alpha-bitmap submission, and showing/hiding the practice overlay over a hidden test-owned window. The canvas is tested at 100%, 150%, and 200% scale. These tests do not establish in-game display compatibility.
 

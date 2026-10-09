@@ -36,54 +36,54 @@ type Settings struct {
 	Positioned     bool   `json:"positioned"`
 }
 
-// The fast spoken clips are over within about 75 ms, so by default each word
-// is all but finished as its direction change arrives.
-const defaultVoiceLeadMS = 60
-
 // voiceLeads is the default lead of each voice style. A word needs time to be
-// heard before its switch; a tone is understood at once, so it sounds on the
-// switch itself.
-var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 125, "tones": 0}
-
-const defaultTimelineWidth = 420
+// heard before its switch: the fast clips are over within about 75 ms, so
+// with a 60 ms lead each word is all but finished as its direction change
+// arrives. A tone is understood at once, so it sounds on the switch itself.
+var voiceLeads = map[string]int{"fast": 60, "natural": 125, "tones": 0}
 
 func defaultSettings() Settings {
-	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS}
-}
-func clamp(v, low, high int) int {
-	if v < low {
-		return low
+	return Settings{
+		WeaponID: "r301", ModeID: "default",
+		Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green",
+		Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: 420,
+		LeftKey: 0x1E, RightKey: 0x20, // A and D
+		StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, // F8 and F9
+		Voice: true, VoiceStyle: "fast", VoiceLeadMS: voiceLeads["fast"],
 	}
-	if v > high {
-		return high
-	}
-	return v
 }
+
+func clamp(v, low, high int) int { return min(max(v, low), high) }
+
+// normalized returns s with every value made valid: numbers are clamped to
+// their ranges, and unknown names and unusable keys fall back to the defaults.
 func (s Settings) normalized() Settings {
+	d := defaultSettings()
 	weapon, mode := pattern.Find(s.WeaponID, s.ModeID)
 	s.WeaponID, s.ModeID = weapon.ID, mode.ID
 	s.Gap = clamp(s.Gap, 40, 300)
 	s.ArrowSize = clamp(s.ArrowSize, 24, 72)
 	s.Opacity = clamp(s.Opacity, 20, 100)
 	if _, known := palettes[s.Theme]; !known {
-		s.Theme = "green"
+		s.Theme = d.Theme
 	}
 	s.TimelineOffset = clamp(s.TimelineOffset, -800, 800)
 	s.TimelineWidth = clamp(s.TimelineWidth, 280, 800)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
 	s.OffsetY = clamp(s.OffsetY, -10000, 10000)
 	if s.LeftKey <= 0 || s.RightKey <= 0 || s.LeftKey == s.RightKey {
-		s.LeftKey, s.RightKey = 0x1E, 0x20 // A and D
+		s.LeftKey, s.RightKey = d.LeftKey, d.RightKey
 	}
 	if s.StartKey <= 0 || s.EndKey <= 0 || s.PauseKey <= 0 || s.PauseKey == s.StartKey || s.PauseKey == s.EndKey {
-		s.StartKey, s.EndKey, s.PauseKey = 0x42, 0x42, 0x43 // F8 and F9
+		s.StartKey, s.EndKey, s.PauseKey = d.StartKey, d.EndKey, d.PauseKey
 	}
 	if _, known := voiceLeads[s.VoiceStyle]; !known {
-		s.VoiceStyle = "fast"
+		s.VoiceStyle = d.VoiceStyle
 	}
 	s.VoiceLeadMS = clamp(s.VoiceLeadMS, 0, 350)
 	return s
 }
+
 func settingsPath() string {
 	base, err := os.UserConfigDir()
 	if err != nil {
@@ -91,6 +91,9 @@ func settingsPath() string {
 	}
 	return filepath.Join(base, "RecoilPractice", "settings.json")
 }
+
+// readSettings loads the saved settings. A missing or unreadable file gives
+// the defaults.
 func readSettings() Settings {
 	s := defaultSettings()
 	b, err := os.ReadFile(settingsPath())
@@ -101,6 +104,9 @@ func readSettings() Settings {
 	}
 	return s.normalized()
 }
+
+// writeSettings replaces the settings file in one step, so a crash cannot
+// leave half of one behind.
 func writeSettings(s Settings) error {
 	path := settingsPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {

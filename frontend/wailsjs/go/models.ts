@@ -80,6 +80,7 @@ export namespace main {
 	    direction: string;
 	    runId: number;
 	    error: string;
+	    seq: number;
 	    player: pattern.Segment[];
 	    playerEndMs: number;
 	    score?: pattern.Score;
@@ -115,6 +116,7 @@ export namespace main {
 	        this.direction = source["direction"];
 	        this.runId = source["runId"];
 	        this.error = source["error"];
+	        this.seq = source["seq"];
 	        this.player = this.convertValues(source["player"], pattern.Segment);
 	        this.playerEndMs = source["playerEndMs"];
 	        this.score = this.convertValues(source["score"], pattern.Score);

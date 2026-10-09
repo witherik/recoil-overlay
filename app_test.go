@@ -102,8 +102,8 @@ func TestStartGatesAndFreshPressAfterPause(t *testing.T) {
 	if a.runID != 1 {
 		t.Fatal("repeat down restarted spray")
 	}
-	a.handleInputLocked(inputEvent{Kind: "pause"})
-	a.handleInputLocked(inputEvent{Kind: "pause"})
+	a.pauseLocked()
+	a.pauseLocked()
 	a.handleInputLocked(e)
 	if a.running {
 		t.Fatal("reenabling while held must not restart")
@@ -170,28 +170,6 @@ func TestStrafeTrackAndReview(t *testing.T) {
 	a.advanceLocked(at.Add(7*time.Second), true)
 	if got := a.snapshotLocked(); got.PlayerEndMS != 2210 || got.Score == nil || got.Score.Missed != 2 || got.Running || got.Player[0].EndMS != 2210 {
 		t.Fatalf("completed spray: %+v %+v", got, got.Score)
-	}
-}
-
-func TestBindKey(t *testing.T) {
-	a, _ := testApp()
-	a.editing = true
-	left, right := a.settings.LeftKey, a.settings.RightKey
-	bind := func(side string, code int) {
-		a.binding = side
-		a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: true})
-	}
-	bind("left", 0x01) // Escape cancels
-	if a.binding != "" || a.settings.LeftKey != left {
-		t.Fatal("escape should cancel")
-	}
-	bind("left", 0xE04B)
-	if a.settings.LeftKey != 0xE04B || a.settings.RightKey != right || a.leftDown {
-		t.Fatalf("bind left: %+v", a.settings)
-	}
-	bind("right", 0xE04B) // taking the other side's key swaps them
-	if a.settings.RightKey != 0xE04B || a.settings.LeftKey != right {
-		t.Fatalf("swap: %+v", a.settings)
 	}
 }
 
@@ -273,21 +251,41 @@ func TestPracticeKeys(t *testing.T) {
 	if !a.armed {
 		t.Fatal("a fresh press should enable again")
 	}
-	key(pause, false)
+}
+
+func TestBindKey(t *testing.T) {
+	a, _ := testApp()
+	a.editing = true
+	left, right := a.settings.LeftKey, a.settings.RightKey
+	press := func(code int) { a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: true}) }
+	bind := func(action string, code int) {
+		a.binding = action
+		press(code)
+	}
+	bind("left", 0x01) // Escape cancels
+	if a.binding != "" || a.settings.LeftKey != left {
+		t.Fatal("escape should cancel")
+	}
+	bind("left", 0xE04B)
+	if a.settings.LeftKey != 0xE04B || a.settings.RightKey != right || a.leftDown {
+		t.Fatalf("bind left: %+v", a.settings)
+	}
+	bind("right", 0xE04B) // taking the other side's key swaps them
+	if a.settings.RightKey != 0xE04B || a.settings.LeftKey != right {
+		t.Fatalf("swap: %+v", a.settings)
+	}
 	// A key held by an unrelated action is refused, and the binding keeps waiting.
-	a.binding = "start"
-	key(pause, true)
-	key(a.settings.LeftKey, true)
+	bind("start", a.settings.PauseKey)
+	press(a.settings.LeftKey)
 	if a.binding != "start" || a.settings.StartKey != 0x42 || !a.armed {
 		t.Fatalf("taken keys must be refused: %+v", a.settings)
 	}
-	key(0x41, true) // F7: start and end may then differ
-	key(0x41, true) // its auto-repeat must not start practice
+	press(0x41) // F7: start and end may then differ
+	press(0x41) // its auto-repeat must not start practice
 	if a.binding != "" || a.settings.StartKey != 0x41 || a.settings.EndKey != 0x42 || !a.editing || a.err != "" {
 		t.Fatalf("bind start: %+v %q", a.settings, a.err)
 	}
-	a.binding = "end"
-	key(0x41, true) // sharing the start key makes it a toggle
+	bind("end", 0x41) // sharing the start key makes it a toggle
 	if a.settings.EndKey != 0x41 || a.settings.StartKey != 0x41 {
 		t.Fatalf("shared key: %+v", a.settings)
 	}
@@ -351,5 +349,22 @@ func TestResetDefaultsKeepsTheWindowInPlace(t *testing.T) {
 	a.settings.Gap = 200
 	if a.ResetDefaults().Settings.Gap != 200 {
 		t.Fatal("practice mode must not reset")
+	}
+}
+
+func TestStateIsSentOnlyWhenItChanges(t *testing.T) {
+	a, _ := testApp()
+	a.editing = true
+	first := a.emitLocked()
+	if again := a.emitLocked(); again.Seq != first.Seq {
+		t.Fatal("an unchanged state must not be sent again")
+	}
+	a.err = "boom"
+	changed := a.emitLocked()
+	if changed.Seq != first.Seq+1 || changed.Error != "boom" {
+		t.Fatalf("a change should be sent: %+v", changed)
+	}
+	if cleared := a.DismissError(); cleared.Error != "" || cleared.Seq != changed.Seq+1 {
+		t.Fatalf("dismissing should clear the error: %+v", cleared)
 	}
 }

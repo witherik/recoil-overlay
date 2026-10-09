@@ -15,13 +15,8 @@ const icons = Object.fromEntries(
     }),
   ).map(([path, url]) => [path.match(/([^/]+)\.svg$/)[1], url]),
 );
-const glyphs = {
-  minimise: "M6 12h12",
-  close: "M6 6l12 12M18 6 6 18",
-  chevron: "m6 9 6 6 6-6",
-};
-const icon = (name) =>
-  `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="${glyphs[name]}"/></svg>`;
+
+// The settings, by kind of control. Each key is a field of the Go Settings.
 // A slider and a number field for the same setting.
 const sliders = {
   gap: ["Spacing", 40, 300, 2, "px"],
@@ -31,12 +26,11 @@ const sliders = {
   timelineWidth: ["Width", 280, 800, 4, "px"],
   opacity: ["Opacity", 20, 100, 1, "%"],
 };
-const slider = (id) => {
-  const [label, min, max, step, unit] = sliders[id];
-  return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
-};
-const card = (name, title, toggle, body) =>
-  `<section class="card ${name}"><h2>${title}${toggle ? `<input id="${toggle}" type="checkbox" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
+// Checkboxes, with the id `${key}-toggle`. The first three switch a whole card.
+const cardToggles = ["arrows", "timeline", "voice"];
+const toggles = [...cardToggles, "timelineIdle", "voiceStart"];
+const selects = ["theme", "voiceStyle"];
+// The actions a key can be bound to (see BindKey in app.go).
 const bindings = {
   left: "Strafe left",
   right: "Strafe right",
@@ -44,6 +38,79 @@ const bindings = {
   end: "End practice",
   pause: "Disable / enable",
 };
+
+// The markup. Rows are flex containers, so nothing depends on the whitespace
+// between their children.
+const glyphs = {
+  minimise: "M6 12h12",
+  close: "M6 6l12 12M18 6 6 18",
+  chevron: "m6 9 6 6 6-6",
+};
+const icon = (name) =>
+  `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="${glyphs[name]}"/></svg>`;
+const slider = (id) => {
+  const [label, min, max, step, unit] = sliders[id];
+  return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
+};
+const select = (id, label, description, options) =>
+  `<div class="field"><span>${label}</span><select id="${id}" aria-label="${description}">${options
+    .map(([value, name]) => `<option value="${value}">${name}</option>`)
+    .join("")}</select></div>`;
+const check = (key, label, hint) =>
+  `<label class="field wide" title="${hint}"><span>${label}</span><input id="${key}-toggle" type="checkbox"></label>`;
+const card = (name, title, body) =>
+  `<section class="card ${name}"><h2>${title}${cardToggles.includes(name) ? `<input id="${name}-toggle" type="checkbox" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
+const cards = [
+  card("arrows", "Arrows", slider("gap") + slider("arrowSize")),
+  card(
+    "timeline",
+    "Timeline",
+    slider("timelineOffset") +
+      slider("timelineWidth") +
+      check(
+        "timelineIdle",
+        "Hide while shooting",
+        "Hide the timeline in practice while left-click is held",
+      ),
+  ),
+  card(
+    "overlay",
+    "Overlay",
+    select(
+      "theme",
+      "Colors",
+      "Color scheme",
+      theme.schemes.map(({ id, name }) => [id, name]),
+    ) +
+      slider("opacity") +
+      `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay"></button><button id="move" title="Drag the overlay into place">Move</button><button id="centerOverlay" title="Put the overlay back on the crosshair">Center</button></div>`,
+  ),
+  card(
+    "voice",
+    "Voice",
+    select("voiceStyle", "Sound", "Voice sound", [
+      ["fast", "Fast voice"],
+      ["natural", "Natural voice"],
+      ["tones", "Tones"],
+    ]) +
+      `<div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div>` +
+      check(
+        "voiceStart",
+        "Opening cue",
+        "Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable.",
+      ),
+  ),
+  card(
+    "keys",
+    "Keys",
+    `<div class="binds">${Object.entries(bindings)
+      .map(
+        ([id, label]) =>
+          `<div class="bind"><span>${label}</span><button id="bind-${id}" class="key"></button></div>`,
+      )
+      .join("")}</div>`,
+  ),
+];
 document.querySelector("#app").innerHTML = `
  <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.1</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
  <main class="controls">
@@ -52,48 +119,34 @@ document.querySelector("#app").innerHTML = `
    <div id="modes" class="modes" role="radiogroup" aria-label="Firing mode"></div>
    <div id="weapon-menu" class="weapon-menu" role="listbox" aria-label="Weapon" hidden></div>
   </section>
-  <div class="cards">
-   ${card("arrows", "Arrows", "arrows-toggle", slider("gap") + slider("arrowSize"))}
-   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="field wide" title="Hide the timeline in practice while left-click is held"><span>Hide while shooting</span><input id="timelineIdle-toggle" type="checkbox"></label>`)}
-   ${card(
-     "overlay",
-     "Overlay",
-     "",
-     `<div class="field"><span>Colors</span><select id="theme" aria-label="Color scheme">${theme.schemes
-       .map(({ id, name }) => `<option value="${id}">${name}</option>`)
-       .join("")}</select></div>` +
-       slider("opacity") +
-       `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay"></button><button id="move" title="Drag the overlay into place">Move</button><button id="centerOverlay" title="Put the overlay back on the crosshair">Center</button></div>`,
-   )}
-   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="field wide" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><span>Opening cue</span><input id="voiceStart-toggle" type="checkbox"></label>`)}
-   ${card(
-     "keys",
-     "Keys",
-     "",
-     `<div class="binds">${Object.entries(bindings)
-       .map(
-         ([id, label]) =>
-           `<div class="bind"><span>${label}</span><button id="bind-${id}" class="key"></button></div>`,
-       )
-       .join("")}</div>`,
-   )}
-  </div>
+  <div class="cards">${cards.join("")}</div>
   <div class="actions"><button id="preview">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
   <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span> <span class="divider">·</span> <kbd id="help-pause"></kbd> disable / enable</p>
-  <p id="error" role="alert" hidden></p>
+  <p id="error" role="alert" title="Click to dismiss" hidden></p>
  </main>
  <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button></footer>
 `;
 const $ = (id) => document.getElementById(id);
+
+// The state last received from Go, and the settings as edited here. Edits are
+// shown at once and saved shortly after; until then, incoming state does not
+// overwrite them.
 let state,
   localSettings,
-  pending = false,
-  saving = false,
-  debounce,
-  savePromise;
+  pending = false, // there are edits not yet sent
+  saving = null, // the save in flight, a promise
+  debounce;
+// An error stays up until it is clicked away: either the one in the state, or
+// the failure of a command sent from here.
+let failure = "";
+function showError() {
+  const message = state?.error || failure;
+  $("error").hidden = !message;
+  $("error").textContent = message;
+}
 function error(err) {
-  $("error").hidden = false;
-  $("error").textContent = String(err);
+  failure = String(err);
+  showError();
 }
 let weapons = [];
 const categories = {
@@ -170,7 +223,23 @@ function syncWeapon(config) {
     button.setAttribute("aria-checked", on);
   }
 }
+// The footer's one line on what the app is doing: the first that applies.
+function statusText(s) {
+  if (!native) return "Browser preview · global input unavailable";
+  if (!s.inputReady) return "Input unavailable";
+  if (s.binding) return "Press an unused key · Esc cancels";
+  if (!s.armed) return `Paused · ${s.pauseKey} to resume`;
+  if (s.moving) return "Drag the overlay onto your crosshair";
+  if (s.editing) return "Edit mode · adjust your overlay";
+  if (!s.focused) return "Waiting for Apex Legends";
+  if (s.running) return "Follow the highlighted arrow";
+  if (s.held) return "Pattern complete · release to reset";
+  return "Ready · hold left-click";
+}
 function render(s) {
+  // State is only sent when it changes, so a late copy of an older one must
+  // not replace what is shown.
+  if (s.seq < state?.seq) return;
   state = s;
   if (!pending && !saving) localSettings = { ...s.settings };
   const config = localSettings || s.settings;
@@ -178,29 +247,23 @@ function render(s) {
   root.dataset.theme = scheme.id;
   root.style.setProperty("--right", scheme.right);
   root.style.setProperty("--left", scheme.left);
-  $("theme").value = config.theme;
+  // A field being typed in is left alone.
   for (const id in sliders)
     for (const input of [$(id), $(`${id}-number`)])
       if (document.activeElement !== input) input.value = config[id];
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
-  $("arrows-toggle").checked = config.arrows;
-  $("timeline-toggle").checked = config.timeline;
-  $("voice-toggle").checked = config.voice;
-  $("voiceStyle").value = config.voiceStyle;
-  $("voiceStart-toggle").checked = config.voiceStart;
-  $("timelineIdle-toggle").checked = config.timelineIdle;
+  for (const id of selects) $(id).value = config[id];
+  for (const key of toggles) $(`${key}-toggle`).checked = config[key];
   // A switched-off category keeps its settings but fades the whole card.
-  for (const [name, on] of [
-    ["arrows", config.arrows],
-    ["timeline", config.timeline],
-    ["voice", config.voice],
-  ]) {
-    document.querySelector(`.card.${name}`).classList.toggle("off", !on);
+  for (const name of cardToggles) {
+    document
+      .querySelector(`.card.${name}`)
+      .classList.toggle("off", !config[name]);
     for (const control of document.querySelectorAll(
       `.card.${name} > :not(h2) :is(input, select)`,
     ))
-      control.disabled = !on;
+      control.disabled = !config[name];
   }
   syncWeapon(config);
   for (const id in bindings) {
@@ -220,52 +283,30 @@ function render(s) {
   $("move").classList.toggle("active", s.moving);
   // Not tied to unsaved edits: clicking it saves them first.
   $("lock").disabled = !s.inputReady;
-  let status = !native
-    ? "Browser preview · global input unavailable"
-    : !s.inputReady
-      ? "Input unavailable"
-      : s.binding
-        ? "Press an unused key · Esc cancels"
-        : !s.armed
-          ? `Paused · ${s.pauseKey} to resume`
-          : s.moving
-            ? "Drag the overlay onto your crosshair"
-            : s.editing
-              ? "Edit mode · adjust your overlay"
-              : !s.focused
-                ? "Waiting for Apex Legends"
-                : s.running
-                  ? "Follow the highlighted arrow"
-                  : s.held
-                    ? "Pattern complete · release to reset"
-                    : "Ready · hold left-click";
-  $("status").textContent = status;
+  $("status").textContent = statusText(s);
   $("status-dot").classList.toggle("live", s.inputReady && s.armed);
-  $("error").hidden = !s.error;
-  if (s.error) $("error").textContent = s.error;
+  showError();
 }
+// Sends unsaved edits, one request at a time, until none are left.
 async function flushSettings() {
   clearTimeout(debounce);
-  if (savePromise) {
-    await savePromise;
-    return flushSettings();
+  while (saving || pending) {
+    if (saving) {
+      await saving;
+      continue;
+    }
+    pending = false;
+    saving = api.UpdateSettings({ ...localSettings });
+    try {
+      const result = await saving;
+      saving = null;
+      render(result);
+    } catch (e) {
+      saving = null;
+      error(e);
+      throw e;
+    }
   }
-  if (!pending) return;
-  pending = false;
-  saving = true;
-  savePromise = api.UpdateSettings({ ...localSettings });
-  try {
-    const result = await savePromise;
-    saving = false;
-    render(result);
-  } catch (e) {
-    saving = false;
-    error(e);
-    throw e;
-  } finally {
-    savePromise = null;
-  }
-  if (pending) await flushSettings();
 }
 // Records a changed setting. Unless send is false, it is saved, and so shown
 // on the overlay, shortly after.
@@ -276,11 +317,16 @@ function change(key, value, send = true) {
   clearTimeout(debounce);
   if (send) debounce = setTimeout(() => flushSettings().catch(error), 180);
 }
-const clamped = (input) =>
-  Math.max(
-    Number(input.min),
-    Math.min(Number(input.max), Math.round(Number(input.value)) || 0),
-  );
+// Typed values apply once complete, so a half-typed number is not clamped.
+function typed(input, key) {
+  input.addEventListener("change", () => {
+    input.value = Math.max(
+      Number(input.min),
+      Math.min(Number(input.max), Math.round(Number(input.value)) || 0),
+    );
+    change(key, Number(input.value));
+  });
+}
 for (const key in sliders) {
   // While a slider is dragged only its number follows; the overlay is updated
   // once, when it is let go.
@@ -288,28 +334,15 @@ for (const key in sliders) {
     change(key, Number(e.target.value), false),
   );
   $(key).addEventListener("change", (e) => change(key, Number(e.target.value)));
-  // Typed values apply once complete, so a half-typed number is not clamped.
-  $(`${key}-number`).addEventListener("change", (e) => {
-    e.target.value = clamped(e.target);
-    change(key, Number(e.target.value));
-  });
+  typed($(`${key}-number`), key);
 }
-$("voiceLeadMs").addEventListener("change", (e) => {
-  e.target.value = clamped(e.target);
-  change("voiceLeadMs", Number(e.target.value));
-});
-for (const [id, key] of [
-  ["arrows-toggle", "arrows"],
-  ["timeline-toggle", "timeline"],
-  ["timelineIdle-toggle", "timelineIdle"],
-  ["voiceStart-toggle", "voiceStart"],
-  ["voice-toggle", "voice"],
-])
-  $(id).addEventListener("change", (e) => change(key, e.target.checked));
-$("voiceStyle").addEventListener("change", (e) =>
-  change("voiceStyle", e.target.value),
-);
-$("theme").addEventListener("change", (e) => change("theme", e.target.value));
+typed($("voiceLeadMs"), "voiceLeadMs");
+for (const key of toggles)
+  $(`${key}-toggle`).addEventListener("change", (e) =>
+    change(key, e.target.checked),
+  );
+for (const id of selects)
+  $(id).addEventListener("change", (e) => change(id, e.target.value));
 $("weapon-button").onclick = () => {
   const open = $("weapon-menu").hidden;
   $("weapon-menu").hidden = !open;
@@ -318,28 +351,27 @@ $("weapon-button").onclick = () => {
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".weapon-bar")) closeMenu();
 });
-// Flushes pending settings, then runs a command that returns the new state.
-const command = (name) => async () => {
+// Saves pending settings, runs a command, and shows the state it returns.
+async function run(command) {
   try {
     await flushSettings();
-    render(await api[name]());
+    const next = await command();
+    if (next) render(next);
   } catch (e) {
     error(e);
   }
-};
-$("preview").onclick = async () => {
-  try {
-    await flushSettings();
-    if (state.running && state.preview) await api.StopPreview();
-    else render(await api.Preview());
-  } catch (e) {
-    error(e);
-  }
-};
-$("lock").onclick = command("ToggleMode");
-$("move").onclick = command("ToggleMove");
-$("showOverlay").onclick = command("ToggleOverlay");
-$("centerOverlay").onclick = command("CenterOverlay");
+}
+$("preview").onclick = () =>
+  run(() =>
+    state.running && state.preview ? api.StopPreview() : api.Preview(),
+  );
+for (const [id, command] of [
+  ["lock", "ToggleMode"],
+  ["move", "ToggleMove"],
+  ["showOverlay", "ToggleOverlay"],
+  ["centerOverlay", "CenterOverlay"],
+])
+  $(id).onclick = () => run(() => api[command]());
 for (const id in bindings)
   $(`bind-${id}`).onclick = (e) => {
     e.target.blur(); // so Space or Enter can be bound without re-clicking
@@ -360,11 +392,16 @@ $("reset").onclick = async () => {
   clearTimeout(debounce);
   pending = false; // unsaved edits are being reset too
   try {
-    if (savePromise) await savePromise;
+    if (saving) await saving;
     render(await api.ResetDefaults());
   } catch (e) {
     error(e);
   }
+};
+$("error").onclick = () => {
+  failure = "";
+  if (state?.error) api.DismissError().then(render).catch(error);
+  else showError();
 };
 $("quit").onclick = () => api.Quit().catch(error);
 document.addEventListener("keydown", (e) => {

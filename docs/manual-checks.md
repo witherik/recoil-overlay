@@ -11,7 +11,7 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 - [ ] Set the timeline spacing to a negative value. Confirm the timeline moves above the arrows, the status line moves below them, and the arrows stay on the crosshair.
 - [ ] Open the weapon menu, pick another weapon and, where offered, another firing mode. Confirm the overlay timeline changes with it.
 - [ ] Click **Hide** and confirm the overlay disappears; **Show** brings it back. Hide it, click **Preview pattern**, and confirm it returns and plays the pattern.
-- [ ] Click **Move overlay**, drag the overlay by its backdrop, and click **Done moving**. Confirm it stays where you left it, without the backdrop, and is still there in practice mode. Click **Center** and confirm it returns to the crosshair.
+- [ ] Click **Move**, drag the overlay by its backdrop, and click **Done**. Confirm it stays where you left it, without the backdrop, and is still there in practice mode. Click **Center** and confirm it returns to the crosshair.
 - [ ] Click **–** in the title bar. Confirm the settings window goes to the taskbar and the overlay disappears; restore it from the taskbar and confirm the overlay returns. Minimise again, press F8 twice, and confirm practice starts and then the settings window comes back up.
 - [ ] Press F8 to enter practice mode. Confirm the settings window minimises to the taskbar, the overlay is click-through and stays above the game, and the arrows sit either side of the crosshair.
 - [ ] In practice mode, click the app in the taskbar. Confirm practice ends and the settings window comes back with the overlay preview.

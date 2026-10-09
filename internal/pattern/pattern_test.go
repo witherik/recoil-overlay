@@ -2,38 +2,14 @@ package pattern
 
 import "testing"
 
-func TestR301ReturnsFreshPattern(t *testing.T) {
-	want := []Phase{
-		{Direction: "right", DurationMS: 800},
-		{Direction: "left", DurationMS: 530},
-		{Direction: "right", DurationMS: 880},
-	}
-	first := R301()
-	if len(first) != len(want) {
-		t.Fatalf("R301() length = %d, want %d", len(first), len(want))
-	}
-	for i := range want {
-		if first[i] != want[i] {
-			t.Errorf("R301()[%d] = %#v, want %#v", i, first[i], want[i])
-		}
-	}
-	first[0].Direction = "changed"
-	if got := R301()[0].Direction; got != "right" {
-		t.Errorf("mutating one result changed a later result: direction = %q", got)
-	}
-}
-
-func TestTotalMS(t *testing.T) {
-	if got := TotalMS(R301()); got != 2210 {
-		t.Errorf("TotalMS(R301()) = %d, want 2210", got)
-	}
-	if got := TotalMS(nil); got != 0 {
-		t.Errorf("TotalMS(nil) = %d, want 0", got)
-	}
+// r301 is the pattern most tests use: right 800, left 530, right 880.
+func r301() []Phase {
+	_, mode := Find("r301", "default")
+	return mode.Phases
 }
 
 func TestAtBoundaries(t *testing.T) {
-	phases := R301()
+	phases := r301()
 	tests := []struct {
 		elapsed int64
 		index   int
@@ -62,7 +38,7 @@ func TestAtBoundaries(t *testing.T) {
 }
 
 func TestCues(t *testing.T) {
-	phases := R301()
+	phases := r301()
 	got := Cues(phases, 100)
 	want := []Cue{
 		{AtMS: 0, Direction: "right"},

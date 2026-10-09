@@ -25,8 +25,17 @@ import (
 
 // Practice draws a premultiplied alpha bitmap into a native layered window
 // placed over the crosshair; the OS then handles true click-through. Edit mode
-// shows the same window as its preview. See setOverlayMode for why the Wails window can't be used.
-var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
+// shows the same window as its preview. See practiceWindow for why the Wails
+// window can't be used.
+var (
+	gdi32 = windows.NewLazySystemDLL("gdi32.dll")
+
+	createCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	createDIBSection   = gdi32.NewProc("CreateDIBSection")
+	selectObject       = gdi32.NewProc("SelectObject")
+	deleteObject       = gdi32.NewProc("DeleteObject")
+	deleteDC           = gdi32.NewProc("DeleteDC")
+)
 
 // The overlay is set in Segoe UI, like the settings window. Go Regular stands
 // in if Windows has no copy of it.
@@ -40,12 +49,20 @@ var overlayFont = func() *opentype.Font {
 	return f
 }()
 
-// Vertical midpoint of the arrows, in unscaled pixels from the window top,
-// while the timeline is below them or hidden.
+// The layout, in unscaled pixels.
+
+// Vertical midpoint of the arrows, from the window top, while the timeline is
+// below them or hidden.
 const arrowAnchorY = 142.0
 
 // Baseline of the status line under the arrows, used when the timeline is above.
 const statusBelow = 89.0
+
+// Height of the timeline box: header, expected track, player track, ticks.
+const timelineHeight = 114.0
+
+// Opacity of the arrow that is not currently called for (the frontend matches).
+const inactiveArrowAlpha = 40
 
 // A negative timeline spacing puts the timeline above the arrows, that far
 // from their top edge.
@@ -60,40 +77,6 @@ func anchorY(s Settings) float64 {
 	return arrowAnchorY
 }
 
-// Opacity of the arrow that is not currently called for (the frontend matches).
-const inactiveArrowAlpha = 40
-
-// Height of the timeline box: header, expected track, player track, ticks.
-const timelineHeight = 114.0
-
-var practiceFrameValid bool
-var lastPracticeFrame frameKey
-
-type frameKey struct {
-	Settings          Settings
-	Width, Height     int
-	DPI               uint32
-	Elapsed           int64
-	Direction, Status string
-	Armed, Moving     bool
-	Held, Editing     bool
-	Revision          uint64
-}
-type point struct{ X, Y int32 }
-type bitmapHeader struct {
-	Size                   uint32
-	Width, Height          int32
-	Planes, BitCount       uint16
-	Compression, SizeImage uint32
-	XPels, YPels           int32
-	Used, Important        uint32
-}
-type bitmapInfo struct {
-	Header bitmapHeader
-	Colors uint32
-}
-type blendFunction struct{ Operation, Flags, Alpha, Format byte }
-
 // Pixel size of the overlay window: just large enough for what is drawn.
 func overlaySize(s Settings, scale float64) (int32, int32) {
 	height := anchorY(s) + float64(s.ArrowSize)/2 + 12
@@ -106,6 +89,7 @@ func overlaySize(s Settings, scale float64) (int32, int32) {
 	return int32(math.Round(float64(max(464, s.TimelineWidth+44)) * scale)), int32(math.Round(height * scale))
 }
 
+// practiceStatus is the line of text that says what the overlay is waiting for.
 func practiceStatus(s Snapshot) string {
 	if s.Moving {
 		return "DRAG TO POSITION"
@@ -125,12 +109,27 @@ func practiceStatus(s Snapshot) string {
 	}
 	return end + " EDIT  /  " + pause + " DISABLE"
 }
+
+// Everything a frame depends on. An unchanged frame is not drawn again.
+type frameKey struct {
+	Settings          Settings
+	Width, Height     int
+	DPI               uint32
+	Elapsed           int64
+	Direction, Status string
+	Armed, Moving     bool
+	Held, Editing     bool
+	Revision          uint64
+}
+
+var practiceFrameValid bool
+var lastPracticeFrame frameKey
+
+// renderPractice draws s on the overlay window, where placeOverlay last put it.
 func renderPractice(s Snapshot) error {
 	if practiceWindow == 0 {
 		return fmt.Errorf("overlay window unavailable")
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	rect := practiceRect
 	width, height := int(rect.Right-rect.Left), int(rect.Bottom-rect.Top)
 	if width <= 0 || height <= 0 || width > 8192 || height > 8192 {
@@ -144,21 +143,57 @@ func renderPractice(s Snapshot) error {
 	if practiceFrameValid && key == lastPracticeFrame {
 		return nil
 	}
+	// Only place the window once per mode change, so a drag is never undone.
+	var position *point
+	if !practicePlaced {
+		position = &point{rect.Left, rect.Top}
+	}
 	surface := drawPractice(s, width, height, float64(dpi)/96)
-	dc, _, err := gdi32.NewProc("CreateCompatibleDC").Call(0)
+	if err := presentOverlay(surface, position, byte(s.Settings.Opacity*255/100)); err != nil {
+		return err
+	}
+	lastPracticeFrame = key
+	practiceFrameValid, practicePlaced = true, true
+	return nil
+}
+
+type bitmapHeader struct {
+	Size                   uint32
+	Width, Height          int32
+	Planes, BitCount       uint16
+	Compression, SizeImage uint32
+	XPels, YPels           int32
+	Used, Important        uint32
+}
+
+type bitmapInfo struct {
+	Header bitmapHeader
+	Colors uint32
+}
+
+type blendFunction struct{ Operation, Flags, Alpha, Format byte }
+
+// presentOverlay makes surface the content of the overlay window, blended
+// onto the screen at the given opacity, and moves the window if position is
+// not nil.
+func presentOverlay(surface *image.RGBA, position *point, opacity byte) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	width, height := surface.Rect.Dx(), surface.Rect.Dy()
+	dc, _, err := createCompatibleDC.Call(0)
 	if dc == 0 {
 		return fmt.Errorf("create overlay canvas: %w", err)
 	}
-	defer gdi32.NewProc("DeleteDC").Call(dc)
+	defer deleteDC.Call(dc)
 	info := bitmapInfo{Header: bitmapHeader{Size: 40, Width: int32(width), Height: -int32(height), Planes: 1, BitCount: 32}}
 	var pixels unsafe.Pointer
-	bitmap, _, err := gdi32.NewProc("CreateDIBSection").Call(dc, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&pixels)), 0, 0)
+	bitmap, _, err := createDIBSection.Call(dc, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&pixels)), 0, 0)
 	if bitmap == 0 || pixels == nil {
 		return fmt.Errorf("create overlay bitmap: %w", err)
 	}
-	defer gdi32.NewProc("DeleteObject").Call(bitmap)
-	old, _, _ := gdi32.NewProc("SelectObject").Call(dc, bitmap)
-	defer gdi32.NewProc("SelectObject").Call(dc, old)
+	defer deleteObject.Call(bitmap)
+	old, _, _ := selectObject.Call(dc, bitmap)
+	defer selectObject.Call(dc, old)
 	dest := unsafe.Slice((*byte)(pixels), width*height*4)
 	// Go RGBA and Win32 BGRA both contain premultiplied channels.
 	for i := 0; i < len(dest); i += 4 {
@@ -169,78 +204,16 @@ func renderPractice(s Snapshot) error {
 	}
 	size := point{int32(width), int32(height)}
 	origin := point{}
-	// Only place the window once per mode change, so a drag is never undone.
-	var position unsafe.Pointer
-	if !practicePlaced {
-		position = unsafe.Pointer(&point{rect.Left, rect.Top})
-	}
-	blend := blendFunction{Alpha: byte(s.Settings.Opacity * 255 / 100), Format: 1}
-	ok, _, err := user32.NewProc("UpdateLayeredWindow").Call(practiceWindow, 0, uintptr(position), uintptr(unsafe.Pointer(&size)), dc, uintptr(unsafe.Pointer(&origin)), 0, uintptr(unsafe.Pointer(&blend)), 2)
+	blend := blendFunction{Alpha: opacity, Format: 1} // AC_SRC_ALPHA
+	const alphaBlend = 2                              // ULW_ALPHA
+	ok, _, err := updateLayeredWindow.Call(practiceWindow, 0, uintptr(unsafe.Pointer(position)), uintptr(unsafe.Pointer(&size)), dc, uintptr(unsafe.Pointer(&origin)), 0, uintptr(unsafe.Pointer(&blend)), alphaBlend)
 	if ok == 0 {
 		return fmt.Errorf("paint transparent overlay: %w", err)
 	}
-	lastPracticeFrame = key
-	practiceFrameValid, practicePlaced = true, true
 	return nil
 }
 
-// A label is one run of text in the timeline header.
-type label struct {
-	text string
-	size float64
-	col  color.NRGBA
-}
-
-// scoreLabels lays the spray's result out as a scoreboard: the total time the
-// switches were mistimed by, in large plain figures (the overlay's face has
-// fixed-width digits, so they hold their place), with its captions small
-// beside it.
-func scoreLabels(score pattern.Score, text, dim color.NRGBA) []label {
-	made := len(score.Switches) - score.Missed
-	switch {
-	case len(score.Switches) == 0:
-		return []label{{"NO SWITCHES", 12, dim}}
-	case made == 0:
-		return []label{{fmt.Sprintf("%d", score.Missed), 20, text}, {" MISSED", 10, dim}}
-	}
-	labels := []label{{"TOTAL DEVIATION  ", 10, dim}, {fmt.Sprintf("%d", score.TotalMS), 20, text}, {" ms", 10, dim}}
-	if score.Missed > 0 {
-		labels = append(labels, label{fmt.Sprintf("   %d MISSED", score.Missed), 10, ui.Miss})
-	}
-	return labels
-}
-func deviationLabel(change pattern.Change, compact bool) string {
-	if change.Missed {
-		return "MISS"
-	}
-	if compact {
-		return fmt.Sprintf("%+d", change.DeviationMS)
-	}
-	return fmt.Sprintf("%+d ms", change.DeviationMS)
-}
-
-// Within 40 ms reads as on time, within 100 ms as close.
-func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
-	off := change.DeviationMS
-	if off < 0 {
-		off = -off
-	}
-	switch {
-	case change.Missed || off > 100:
-		return ui.Miss
-	case off > 40:
-		return ui.Near
-	}
-	return good
-}
-
-// shade is the dark fill behind a segment of the expected bar: its direction's
-// colour, mostly mixed into the timeline box.
-func shade(c color.NRGBA) color.NRGBA {
-	mix := func(v, bg uint8) uint8 { return uint8((int(v)*30 + int(bg)*70) / 100) }
-	return color.NRGBA{mix(c.R, ui.Bg.R), mix(c.G, ui.Bg.G), mix(c.B, ui.Bg.B), 255}
-}
-
+// A canvas draws in unscaled pixels onto an image scale times as large.
 type canvas struct {
 	image *image.RGBA
 	scale float64
@@ -262,6 +235,8 @@ func (c canvas) face(size float64) font.Face {
 	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72, Hinting: font.HintingFull})
 	return unkerned{face}
 }
+
+// text draws text with its baseline starting at (x, y).
 func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
 	face := c.face(size)
 	defer face.Close()
@@ -275,9 +250,12 @@ func (c canvas) width(size float64, text string) float64 {
 	defer face.Close()
 	return float64(font.MeasureString(face, text).Ceil()) / c.scale
 }
+
 func (c canvas) centeredText(center, y, size float64, text string, col color.NRGBA) {
 	c.text(center-c.width(size, text)/2, y, size, text, col)
 }
+
+// line draws an anti-aliased stroke with round ends.
 func (c canvas) line(x1, y1, x2, y2, width float64, col color.NRGBA) {
 	x1 *= c.scale
 	y1 *= c.scale
@@ -306,187 +284,257 @@ func (c canvas) line(x1, y1, x2, y2, width float64, col color.NRGBA) {
 		}
 	}
 }
+
+// drawPractice draws the whole overlay: the arrows either side of the
+// crosshair, the status line and the timeline.
 func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	c := canvas{img, scale}
-	center := float64(width) / scale / 2
-	scheme, known := palettes[s.Settings.Theme]
-	if !known {
-		scheme = palettes["green"]
-	}
-	right, left := scheme.right, scheme.left
-	text, dim := ui.Text, ui.Dim
-	size := float64(s.Settings.ArrowSize)
-	anchor, above := anchorY(s.Settings), timelineAbove(s.Settings)
-	gap := float64(s.Settings.Gap)
+	c := canvas{image.NewRGBA(image.Rect(0, 0, width, height)), scale}
+	w, h := float64(width)/scale, float64(height)/scale
+	center, anchor := w/2, anchorY(s.Settings)
+	scheme := palettes[s.Settings.Theme]
 	if s.Moving {
 		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
-		w, h := float64(width)/scale, float64(height)/scale
-		c.rect(0, 0, w, h, right)
+		c.rect(0, 0, w, h, scheme.right)
 		c.rect(1, 1, w-2, h-2, alpha(ui.Bg, 150))
-		c.line(center-9, anchor, center+9, anchor, 1.5, text)
-		c.line(center, anchor-9, center, anchor+9, 1.5, text)
+		c.line(center-9, anchor, center+9, anchor, 1.5, ui.Text)
+		c.line(center, anchor-9, center, anchor+9, 1.5, ui.Text)
 	}
-	for _, direction := range []string{"left", "right"} {
-		if !s.Settings.Arrows {
-			break
-		}
-		x := center - (gap+size)/2
-		if direction == "right" {
-			x = center + (gap+size)/2
-		}
-		col := dim
-		if s.Armed && s.Direction == direction {
-			if direction == "right" {
-				col = right
-			} else {
-				col = left
-			}
-		}
-		px := func(v float64) float64 { return x - size/2 + v*size/64 }
-		py := func(v float64) float64 { return anchor - size/2 + v*size/64 }
-		coords := [][4]float64{{37, 12, 17, 32}, {17, 32, 37, 52}, {18, 32, 52, 32}}
-		if direction == "right" {
-			coords = [][4]float64{{27, 12, 47, 32}, {47, 32, 27, 52}, {46, 32, 12, 32}}
-		}
-		if col != dim {
-			for _, l := range coords {
-				c.line(px(l[0]), py(l[1])+1, px(l[2]), py(l[3])+1, 9*size/64, alpha(ui.Bg, 170))
-			}
-			for _, l := range coords {
-				c.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
-			}
-			continue
-		}
-		// The waiting arrow is only a faint hint. Draw it opaque on a scratch
-		// layer first so its overlapping strokes do not add up at the joints.
-		layer := canvas{image.NewRGBA(img.Bounds()), scale}
-		for _, l := range coords {
-			layer.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
-		}
-		box := image.Rect(int((x-size)*scale), int((anchor-size)*scale), int((x+size)*scale), int((anchor+size)*scale))
-		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
+	size := float64(s.Settings.ArrowSize)
+	if s.Settings.Arrows {
+		apart := (float64(s.Settings.Gap) + size) / 2
+		c.arrow("left", center-apart, anchor, size, scheme.left, s.Armed && s.Direction == "left")
+		c.arrow("right", center+apart, anchor, size, scheme.right, s.Armed && s.Direction == "right")
 	}
 	// The status line keeps clear of the timeline: it takes the other side.
+	above := timelineAbove(s.Settings)
 	statusY := anchor - 81
 	if above {
 		statusY = anchor + statusBelow
 	}
-	c.centeredText(center, statusY, 11, practiceStatus(s), text)
+	c.centeredText(center, statusY, 11, practiceStatus(s), ui.Text)
 	// Optionally clear the view while shooting; the timeline returns on release.
 	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
 	if s.Settings.Timeline && !firing {
-		w := math.Min(float64(s.Settings.TimelineWidth), float64(width)/scale-44)
-		x := center - w/2
+		boxWidth := math.Min(float64(s.Settings.TimelineWidth), w-44)
 		y := anchor + size/2 + float64(s.Settings.TimelineOffset)
 		if above {
 			y = anchor - size/2 + float64(s.Settings.TimelineOffset) - timelineHeight
 		}
-		box := alpha(ui.Bg, 228)
-		c.rect(x, y, w, timelineHeight, box)
-		total := math.Max(1, float64(s.TotalMS))
-		c.text(x+12, y+19, 12, s.Weapon, text)
-		// Between sprays the last one stays up for review, with its score.
-		review := !s.Running && s.Score != nil
-		playheadMS := s.ElapsedMS
-		summary := []label{{fmt.Sprintf("%.2f / %.2f s", float64(s.ElapsedMS)/1000, total/1000), 12, dim}}
-		if review {
-			playheadMS = s.PlayerEndMS
-			summary = scoreLabels(*s.Score, text, dim)
+		c.timeline(s, center-boxWidth/2, y, boxWidth, scheme)
+	}
+	return c.image
+}
+
+// The arrow on a 64 px grid, pointing left: two strokes for the head and one
+// for the shaft, each from (x1, y1) to (x2, y2).
+var arrowStrokes = [][4]float64{{37, 12, 17, 32}, {17, 32, 37, 52}, {18, 32, 52, 32}}
+
+// arrow draws the arrow for a direction, size pixels wide and centred on
+// (x, y). Lit, it is drawn in col over a dark outline; otherwise it is only a
+// faint hint.
+func (c canvas) arrow(direction string, x, y, size float64, col color.NRGBA, lit bool) {
+	strokes := func(to canvas, width, down float64, col color.NRGBA) {
+		px := func(v float64) float64 {
+			if direction == "right" {
+				v = 64 - v
+			}
+			return x - size/2 + v*size/64
 		}
-		summaryX := x + w - 12
-		for _, part := range summary {
-			summaryX -= c.width(part.size, part.text)
-		}
-		for at, i := summaryX, 0; i < len(summary); i++ {
-			part := summary[i]
-			// Large figures sit a little lower so they centre on the small text.
-			c.text(at, y+19+(part.size-12)/4, part.size, part.text, part.col)
-			at += c.width(part.size, part.text)
-		}
-		// The mode gives way when a narrow timeline has no room for it.
-		if modeX := x + 12 + c.width(12, s.Weapon) + 9; modeX+c.width(10, s.Mode)+9 <= summaryX {
-			c.text(modeX, y+19, 10, s.Mode, dim)
-		}
-		track := w - 24
-		// Each switch is a 3 px cut centred on its exact time. The same cut runs
-		// through the player's bar below, so the two rows line up.
-		const cut = 3.0
-		narrowest, startMS := track, 0.0
-		for i, phase := range s.Phases {
-			duration := float64(phase.DurationMS)
-			from, to := x+12+track*startMS/total, x+12+track*(startMS+duration)/total
-			narrowest = math.Min(narrowest, to-from)
-			if i > 0 {
-				from += cut / 2
-			}
-			if i < len(s.Phases)-1 {
-				to -= cut / 2
-			}
-			// Neutral phases (fire without strafing) are grey.
-			letter, fill, accent := "-", ui.Raised, ui.Line
-			switch phase.Direction {
-			case "right":
-				letter, fill, accent = "R", shade(right), right
-			case "left":
-				letter, fill, accent = "L", shade(left), left
-			}
-			c.rect(from, y+30, to-from, 24, fill)
-			c.rect(from, y+30, to-from, 2, accent)
-			// Short phases drop the duration, then the letter, rather than overflow.
-			for _, label := range []string{fmt.Sprintf("%s  %d ms", letter, phase.DurationMS), letter} {
-				if c.width(12, label) <= to-from-6 {
-					c.centeredText((from+to)/2, y+47, 12, label, text)
-					break
-				}
-			}
-			startMS += duration
-		}
-		// The player's own strafes, on the same time axis; grey is neutral.
-		c.rect(x+12, y+58, track, 24, ui.Fill)
-		for _, segment := range s.Player {
-			fill := right
-			switch segment.Direction {
-			case "left":
-				fill = left
-			case "right":
-			default:
-				continue
-			}
-			from := math.Min(track, track*float64(segment.StartMS)/total)
-			to := math.Min(track, track*float64(segment.EndMS)/total)
-			c.rect(x+12+from, y+58, to-from, 24, fill)
-		}
-		head := x + 12 + track*math.Min(1, float64(playheadMS)/total)
-		// Tick labels sit under each phase start; in review they become deviations.
-		compact := narrowest < 70
-		startMS = 0
-		for i, phase := range s.Phases {
-			label, col := fmt.Sprintf("%.2f", startMS/1000), dim
-			if i == 0 {
-				label = "0"
-			} else {
-				c.rect(x+12+track*startMS/total-cut/2, y+58, cut, 24, box)
-			}
-			if review {
-				for _, change := range s.Score.Switches {
-					if change.AtMS == int64(startMS) {
-						label, col = deviationLabel(change, compact), deviationColor(change, right)
-					}
-				}
-			}
-			if i == 0 {
-				c.text(x+12, y+103, 13, label, col)
-			} else {
-				c.centeredText(x+12+track*startMS/total, y+103, 13, label, col)
-			}
-			startMS += float64(phase.DurationMS)
-		}
-		c.rect(head-1, y+27, 2, 58, text)
-		if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 70 {
-			end := fmt.Sprintf("%.2f s", total/1000)
-			c.text(x+w-12-c.width(13, end), y+103, 13, end, dim)
+		py := func(v float64) float64 { return y - size/2 + v*size/64 + down }
+		for _, l := range arrowStrokes {
+			to.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), width*size/64, col)
 		}
 	}
-	return img
+	if lit {
+		strokes(c, 9, 1, alpha(ui.Bg, 170))
+		strokes(c, 7, 0, col)
+		return
+	}
+	// Draw it opaque on a scratch layer first, so its overlapping strokes do
+	// not add up at the joints.
+	layer := canvas{image.NewRGBA(c.image.Bounds()), c.scale}
+	strokes(layer, 7, 0, ui.Dim)
+	box := image.Rect(int((x-size)*c.scale), int((y-size)*c.scale), int((x+size)*c.scale), int((y+size)*c.scale))
+	draw.DrawMask(c.image, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
+}
+
+// timeline draws the timeline box, w wide with its top-left corner at (x, y):
+// a header, the expected strafes, the player's own on the same time axis below
+// them, and a label under each switch.
+func (c canvas) timeline(s Snapshot, x, y, w float64, scheme palette) {
+	box := alpha(ui.Bg, 228)
+	c.rect(x, y, w, timelineHeight, box)
+	// Between sprays the last one stays up for review, with its score.
+	review := !s.Running && s.Score != nil
+	total := math.Max(1, float64(s.TotalMS))
+	c.header(s, x, y, w, review, total)
+
+	// The bars leave a 12 px margin in the box; at is where a time falls on them.
+	left, track := x+12, w-24
+	at := func(ms float64) float64 { return left + track*ms/total }
+	// starts[i] is when phase i begins; the last entry is the end of the pattern.
+	starts := make([]float64, len(s.Phases)+1)
+	for i, phase := range s.Phases {
+		starts[i+1] = starts[i] + float64(phase.DurationMS)
+	}
+
+	// Each switch is a 3 px cut centred on its exact time. The same cut runs
+	// through the player's bar below, so the two rows line up.
+	const cut = 3.0
+	narrowest := track
+	for i, phase := range s.Phases {
+		from, to := at(starts[i]), at(starts[i+1])
+		narrowest = math.Min(narrowest, to-from)
+		if i > 0 {
+			from += cut / 2
+		}
+		if i < len(s.Phases)-1 {
+			to -= cut / 2
+		}
+		// Neutral phases (fire without strafing) are grey.
+		letter, fill, accent := "-", ui.Raised, ui.Line
+		switch phase.Direction {
+		case "right":
+			letter, fill, accent = "R", shade(scheme.right), scheme.right
+		case "left":
+			letter, fill, accent = "L", shade(scheme.left), scheme.left
+		}
+		c.rect(from, y+30, to-from, 24, fill)
+		c.rect(from, y+30, to-from, 2, accent)
+		// Short phases drop the duration, then the letter, rather than overflow.
+		for _, label := range []string{fmt.Sprintf("%s  %d ms", letter, phase.DurationMS), letter} {
+			if c.width(12, label) <= to-from-6 {
+				c.centeredText((from+to)/2, y+47, 12, label, ui.Text)
+				break
+			}
+		}
+	}
+
+	// The player's own strafes; grey is neutral.
+	c.rect(left, y+58, track, 24, ui.Fill)
+	for _, segment := range s.Player {
+		fill := scheme.right
+		switch segment.Direction {
+		case "left":
+			fill = scheme.left
+		case "right":
+		default:
+			continue
+		}
+		from := math.Min(track, track*float64(segment.StartMS)/total)
+		to := math.Min(track, track*float64(segment.EndMS)/total)
+		c.rect(left+from, y+58, to-from, 24, fill)
+	}
+
+	// Tick labels sit under each phase start; in review they become deviations.
+	compact := narrowest < 70
+	for i := range s.Phases {
+		label, col := fmt.Sprintf("%.2f", starts[i]/1000), ui.Dim
+		if i == 0 {
+			label = "0"
+		}
+		if review {
+			for _, change := range s.Score.Switches {
+				if change.AtMS == int64(starts[i]) {
+					label, col = deviationLabel(change, compact), deviationColor(change, scheme.right)
+				}
+			}
+		}
+		if i == 0 {
+			c.text(left, y+103, 13, label, col)
+			continue
+		}
+		c.rect(at(starts[i])-cut/2, y+58, cut, 24, box)
+		c.centeredText(at(starts[i]), y+103, 13, label, col)
+	}
+	if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 70 {
+		end := fmt.Sprintf("%.2f s", total/1000)
+		c.text(x+w-12-c.width(13, end), y+103, 13, end, ui.Dim)
+	}
+
+	playheadMS := s.ElapsedMS
+	if review {
+		playheadMS = s.PlayerEndMS
+	}
+	head := left + track*math.Min(1, float64(playheadMS)/total)
+	c.rect(head-1, y+27, 2, 58, ui.Text)
+}
+
+// A label is one run of text in the timeline header.
+type label struct {
+	text string
+	size float64
+	col  color.NRGBA
+}
+
+// header draws the top line of the timeline box: the weapon and its mode at
+// the left; at the right the spray's clock or, in review, its score.
+func (c canvas) header(s Snapshot, x, y, w float64, review bool, total float64) {
+	c.text(x+12, y+19, 12, s.Weapon, ui.Text)
+	summary := []label{{fmt.Sprintf("%.2f / %.2f s", float64(s.ElapsedMS)/1000, total/1000), 12, ui.Dim}}
+	if review {
+		summary = scoreLabels(*s.Score)
+	}
+	summaryX := x + w - 12
+	for _, part := range summary {
+		summaryX -= c.width(part.size, part.text)
+	}
+	at := summaryX
+	for _, part := range summary {
+		// Large figures sit a little lower so they centre on the small text.
+		c.text(at, y+19+(part.size-12)/4, part.size, part.text, part.col)
+		at += c.width(part.size, part.text)
+	}
+	// The mode gives way when a narrow timeline has no room for it.
+	if modeX := x + 12 + c.width(12, s.Weapon) + 9; modeX+c.width(10, s.Mode)+9 <= summaryX {
+		c.text(modeX, y+19, 10, s.Mode, ui.Dim)
+	}
+}
+
+// scoreLabels lays the spray's result out as a scoreboard: the total time the
+// switches were mistimed by, in large plain figures (the overlay's face has
+// fixed-width digits, so they hold their place), with its captions small
+// beside it.
+func scoreLabels(score pattern.Score) []label {
+	made := len(score.Switches) - score.Missed
+	switch {
+	case len(score.Switches) == 0:
+		return []label{{"NO SWITCHES", 12, ui.Dim}}
+	case made == 0:
+		return []label{{fmt.Sprintf("%d", score.Missed), 20, ui.Text}, {" MISSED", 10, ui.Dim}}
+	}
+	labels := []label{{"TOTAL DEVIATION  ", 10, ui.Dim}, {fmt.Sprintf("%d", score.TotalMS), 20, ui.Text}, {" ms", 10, ui.Dim}}
+	if score.Missed > 0 {
+		labels = append(labels, label{fmt.Sprintf("   %d MISSED", score.Missed), 10, ui.Miss})
+	}
+	return labels
+}
+
+func deviationLabel(change pattern.Change, compact bool) string {
+	if change.Missed {
+		return "MISS"
+	}
+	if compact {
+		return fmt.Sprintf("%+d", change.DeviationMS)
+	}
+	return fmt.Sprintf("%+d ms", change.DeviationMS)
+}
+
+// Within 40 ms reads as on time, within 100 ms as close.
+func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
+	off := max(change.DeviationMS, -change.DeviationMS)
+	switch {
+	case change.Missed || off > 100:
+		return ui.Miss
+	case off > 40:
+		return ui.Near
+	}
+	return good
+}
+
+// shade is the dark fill behind a segment of the expected bar: its direction's
+// colour, mostly mixed into the timeline box.
+func shade(c color.NRGBA) color.NRGBA {
+	mix := func(v, bg uint8) uint8 { return uint8((int(v)*30 + int(bg)*70) / 100) }
+	return color.NRGBA{mix(c.R, ui.Bg.R), mix(c.G, ui.Bg.G), mix(c.B, ui.Bg.B), 255}
 }

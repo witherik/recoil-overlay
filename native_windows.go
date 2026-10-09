@@ -4,149 +4,86 @@ package main
 
 import (
 	"context"
-	_ "embed"
-	"encoding/binary"
 	"fmt"
 	"math"
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/sys/windows"
 )
 
-var user32 = windows.NewLazySystemDLL("user32.dll")
-var kernel32 = windows.NewLazySystemDLL("kernel32.dll")
-var createWindow = user32.NewProc("CreateWindowExW")
-var destroyWindow = user32.NewProc("DestroyWindow")
-var registerRaw = user32.NewProc("RegisterRawInputDevices")
-var rawData = user32.NewProc("GetRawInputData")
-var getMessage = user32.NewProc("GetMessageW")
-var dispatchMessage = user32.NewProc("DispatchMessageW")
-var postThreadMessage = user32.NewProc("PostThreadMessageW")
-var foregroundWindow = user32.NewProc("GetForegroundWindow")
-var windowText = user32.NewProc("GetWindowTextW")
-var windowPID = user32.NewProc("GetWindowThreadProcessId")
-var enumWindows = user32.NewProc("EnumWindows")
-var getWindowLong = user32.NewProc("GetWindowLongPtrW")
-var setWindowLong = user32.NewProc("SetWindowLongPtrW")
-var setWindowPos = user32.NewProc("SetWindowPos")
-var playSound = windows.NewLazySystemDLL("winmm.dll").NewProc("PlaySoundW")
+var (
+	user32 = windows.NewLazySystemDLL("user32.dll")
 
-// Every clip remains rooted for the entire process lifetime (async PlaySound).
-//
-//go:embed assets/voice/left.wav
-var voiceLeft []byte
+	createWindow        = user32.NewProc("CreateWindowExW")
+	destroyWindow       = user32.NewProc("DestroyWindow")
+	defWindowProc       = user32.NewProc("DefWindowProcW")
+	registerRaw         = user32.NewProc("RegisterRawInputDevices")
+	rawData             = user32.NewProc("GetRawInputData")
+	getMessage          = user32.NewProc("GetMessageW")
+	dispatchMessage     = user32.NewProc("DispatchMessageW")
+	postThreadMessage   = user32.NewProc("PostThreadMessageW")
+	getKeyNameText      = user32.NewProc("GetKeyNameTextW")
+	foregroundWindow    = user32.NewProc("GetForegroundWindow")
+	findWindow          = user32.NewProc("FindWindowW")
+	enumWindows         = user32.NewProc("EnumWindows")
+	windowText          = user32.NewProc("GetWindowTextW")
+	windowPID           = user32.NewProc("GetWindowThreadProcessId")
+	getWindowLong       = user32.NewProc("GetWindowLongPtrW")
+	setWindowLong       = user32.NewProc("SetWindowLongPtrW")
+	setWindowPos        = user32.NewProc("SetWindowPos")
+	getWindowRect       = user32.NewProc("GetWindowRect")
+	getClientRect       = user32.NewProc("GetClientRect")
+	clientToScreen      = user32.NewProc("ClientToScreen")
+	showWindow          = user32.NewProc("ShowWindow")
+	showWindowAsync     = user32.NewProc("ShowWindowAsync")
+	isIconic            = user32.NewProc("IsIconic")
+	updateLayeredWindow = user32.NewProc("UpdateLayeredWindow")
+	getCursorPos        = user32.NewProc("GetCursorPos")
+	setCapture          = user32.NewProc("SetCapture")
+	releaseCapture      = user32.NewProc("ReleaseCapture")
+	monitorFromWindow   = user32.NewProc("MonitorFromWindow")
+	getMonitorInfo      = user32.NewProc("GetMonitorInfoW")
+	getDpiForWindow     = user32.NewProc("GetDpiForWindow")
+	getSystemMetrics    = user32.NewProc("GetSystemMetrics")
+)
 
-//go:embed assets/voice/right.wav
-var voiceRight []byte
+// Win32 values, under their names in the Windows headers.
+const (
+	wmQuit           = 0x0012
+	wmMouseActivate  = 0x0021
+	wmNCHitTest      = 0x0084
+	wmInput          = 0x00FF
+	wmMouseMove      = 0x0200
+	wmLButtonDown    = 0x0201
+	wmLButtonUp      = 0x0202
+	wmCaptureChanged = 0x0215
 
-//go:embed assets/voice/natural/left.wav
-var naturalLeft []byte
+	wsPopup         = 0x80000000
+	wsExTopmost     = 0x00000008
+	wsExTransparent = 0x00000020
+	wsExToolWindow  = 0x00000080
+	wsExLayered     = 0x00080000
+	wsExNoActivate  = 0x08000000
 
-//go:embed assets/voice/natural/right.wav
-var naturalRight []byte
+	swpNoSize     = 0x0001
+	swpNoMove     = 0x0002
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+)
 
-// The tones are synthesized: a low beep for left, an octave higher for right.
-var toneLeft, toneRight = toneClip(440), toneClip(880)
+// The mouse passes through a click-through window, which never takes focus.
+const clickThrough = wsExTransparent | wsExNoActivate
 
-// toneClip is a 60 ms sine beep as a mono PCM16 WAV. It reaches full volume
-// within half a millisecond, so it is heard the moment it is played, and fades
-// out over 5 ms so it does not click.
-func toneClip(hz float64) []byte {
-	const rate, samples, attack, release = 22050, 22050 * 60 / 1000, 11, 110
-	clip := make([]byte, 44+samples*2)
-	copy(clip, "RIFF")
-	binary.LittleEndian.PutUint32(clip[4:], uint32(len(clip)-8))
-	copy(clip[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(clip[16:], 16)
-	binary.LittleEndian.PutUint16(clip[20:], 1) // PCM
-	binary.LittleEndian.PutUint16(clip[22:], 1) // mono
-	binary.LittleEndian.PutUint32(clip[24:], rate)
-	binary.LittleEndian.PutUint32(clip[28:], rate*2)
-	binary.LittleEndian.PutUint16(clip[32:], 2)
-	binary.LittleEndian.PutUint16(clip[34:], 16)
-	copy(clip[36:], "data")
-	binary.LittleEndian.PutUint32(clip[40:], samples*2)
-	for i := 0; i < samples; i++ {
-		gain := math.Min(1, math.Min(float64(i+1)/attack, float64(samples-i)/release))
-		value := 0.6 * 32767 * gain * math.Sin(2*math.Pi*hz*float64(i)/rate)
-		binary.LittleEndian.PutUint16(clip[44+2*i:], uint16(int16(value)))
-	}
-	return clip
-}
+// Indices for GetWindowLongPtr and SetWindowLongPtr: -4 and -20.
+const gwlpWndProc, gwlExStyle = ^uintptr(3), ^uintptr(19)
 
-func playVoice(style, direction string) {
-	left, right := voiceLeft, voiceRight
-	switch style {
-	case "natural":
-		left, right = naturalLeft, naturalRight
-	case "tones":
-		left, right = toneLeft, toneRight
-	}
-	clip := right
-	if direction == "left" {
-		clip = left
-	}
-	playSound.Call(uintptr(unsafe.Pointer(&clip[0])), 0, 0x0001|0x0002|0x0004) // ASYNC | NODEFAULT | MEMORY
-	runtime.KeepAlive(clip)
-}
-func stopVoice() { playSound.Call(0, 0, 0) }
+type point struct{ X, Y int32 }
 
-type inputEvent struct {
-	Kind   string
-	At     time.Time
-	Apex   bool
-	Detail string
-	X, Y   int
-	Code   int // keyboard scan code for "key" events
-	Down   bool
-}
-
-// The listener forwards only the bound keys (two strafe keys, three hotkeys),
-// or the next key pressed while a binding is being captured. Every other
-// keystroke is dropped unread.
-var watchedKeys [5]atomic.Uint32
-var captureKey atomic.Bool
-
-func watched(code uint32) bool {
-	for i := range watchedKeys {
-		if watchedKeys[i].Load() == code {
-			return true
-		}
-	}
-	return false
-}
-
-// keyName returns the label Windows prints on the key with this scan code.
-func keyName(code int) string {
-	lparam := uintptr(code&0xFF) << 16
-	if code&0xE000 != 0 {
-		lparam |= 1 << 24
-	}
-	var text [64]uint16
-	n, _, _ := user32.NewProc("GetKeyNameTextW").Call(lparam, uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)))
-	if n == 0 {
-		return fmt.Sprintf("Key %#x", code)
-	}
-	return windows.UTF16ToString(text[:])
-}
-
-type nativeInput struct {
-	threadID uint32
-	done     chan struct{}
-	once     sync.Once
-}
-type rawDevice struct {
-	Page, Usage uint16
-	Flags       uint32
-	Target      uintptr
-}
 type winMessage struct {
 	Window         uintptr
 	Message        uint32
@@ -156,106 +93,23 @@ type winMessage struct {
 	Private        uint32
 }
 
-func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
-	n := &nativeInput{done: make(chan struct{})}
-	ready := make(chan error, 1)
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer close(n.done)
-		id, _, _ := kernel32.NewProc("GetCurrentThreadId").Call()
-		n.threadID = uint32(id)
-		cls, _ := windows.UTF16PtrFromString("STATIC")
-		hwnd, _, err := createWindow.Call(0, uintptr(unsafe.Pointer(cls)), 0, 0, 0, 0, 0, 0, ^uintptr(2), 0, 0, 0) // HWND_MESSAGE = -3
-		if hwnd == 0 {
-			ready <- fmt.Errorf("create input window: %w", err)
-			return
-		}
-		defer destroyWindow.Call(hwnd)
-		// Background mouse and keyboard, read-only: nothing is suppressed.
-		devices := [2]rawDevice{{Page: 1, Usage: 2, Flags: 0x100, Target: hwnd}, {Page: 1, Usage: 6, Flags: 0x100, Target: hwnd}}
-		ok, _, err := registerRaw.Call(uintptr(unsafe.Pointer(&devices[0])), 2, unsafe.Sizeof(devices[0]))
-		if ok == 0 {
-			ready <- fmt.Errorf("register mouse and keyboard input: %w", err)
-			return
-		}
-		defer func() {
-			for i := range devices {
-				devices[i].Flags = 1
-				devices[i].Target = 0
-			}
-			registerRaw.Call(uintptr(unsafe.Pointer(&devices[0])), 2, unsafe.Sizeof(devices[0]))
-		}()
-		ready <- nil
-		var msg winMessage
-		for {
-			result, _, err := getMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
-			if int32(result) == -1 {
-				events <- inputEvent{Kind: "error", Detail: fmt.Sprintf("Input listener stopped: %v", err)}
-				return
-			}
-			if result == 0 {
-				return
-			}
-			if msg.Message == 0x00FF {
-				at := time.Now()
-				// Fixed aligned buffer covers RAWINPUTHEADER (24 bytes on x64) plus
-				// RAWMOUSE (24) or RAWKEYBOARD (16).
-				var buffer [16]uint64
-				size := uint32(unsafe.Sizeof(buffer))
-				count, _, _ := rawData.Call(msg.LParam, 0x10000003, uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)), 24)
-				if count >= 40 && count <= unsafe.Sizeof(buffer) && size <= uint32(unsafe.Sizeof(buffer)) {
-					bytes := unsafe.Slice((*byte)(unsafe.Pointer(&buffer[0])), int(size))
-					if binary.LittleEndian.Uint32(bytes[:4]) == 1 {
-						code := uint32(binary.LittleEndian.Uint16(bytes[24:26]))
-						flags := binary.LittleEndian.Uint16(bytes[26:28])
-						if flags&2 != 0 {
-							code |= 0xE000 // extended key (arrows, right-hand modifiers)
-						}
-						down := flags&1 == 0
-						if watched(code) || (down && captureKey.Load()) {
-							events <- inputEvent{Kind: "key", At: at, Code: int(code), Down: down}
-						}
-					}
-					if count >= 48 && binary.LittleEndian.Uint32(bytes[:4]) == 0 {
-						flags := binary.LittleEndian.Uint16(bytes[28:30])
-						if flags&1 != 0 {
-							events <- inputEvent{Kind: "down", At: at, Apex: apexForeground()}
-						}
-						if flags&2 != 0 {
-							events <- inputEvent{Kind: "up", At: at}
-						}
-					}
-				}
-			}
-			dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
-		}
-	}()
-	if err := <-ready; err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-func (n *nativeInput) Close() {
-	n.once.Do(func() {
-		postThreadMessage.Call(uintptr(n.threadID), 0x0012, 0, 0)
-		select {
-		case <-n.done:
-		case <-time.After(time.Second):
-		}
-	})
-}
+// The game's window title, with and without its trademark sign.
+var apexTitles = []string{"Apex Legends", "Apex Legends™"}
 
 func titleOf(hwnd uintptr) string {
 	var text [512]uint16
 	windowText.Call(hwnd, uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)))
 	return windows.UTF16ToString(text[:])
 }
+
+// apexForeground reports whether the game is the window being played.
 func apexForeground() bool {
 	hwnd, _, _ := foregroundWindow.Call()
 	title := titleOf(hwnd)
-	return title == "Apex Legends" || title == "Apex Legendsâ„¢"
+	return title == apexTitles[0] || title == apexTitles[1]
 }
+
+// ownWindow finds the settings window, which Wails does not hand out.
 func ownWindow() uintptr {
 	var found uintptr
 	callback := windows.NewCallback(func(hwnd, extra uintptr) uintptr {
@@ -275,7 +129,7 @@ func ownWindow() uintptr {
 // WebView), which can neither be removed nor combined with WS_EX_LAYERED. So
 // the arrows live in a separate native layered window with its own position.
 var mainWindow, practiceWindow uintptr
-var practiceRect struct{ Left, Top, Right, Bottom int32 }
+var practiceRect windows.Rect
 var practiceBase point // top-left of the overlay when its offset is zero
 var practiceDPI uintptr
 var practicePlaced bool
@@ -297,32 +151,32 @@ var overlayGrab point // cursor position inside the window at button-down
 var overlayProc = windows.NewCallback(func(hwnd, msg, wparam, lparam uintptr) uintptr {
 	if overlayMovable.Load() || overlayDragging {
 		var cursor point
-		var rect struct{ Left, Top, Right, Bottom int32 }
+		var rect windows.Rect
 		switch msg {
-		case 0x0084: // WM_NCHITTEST
+		case wmNCHitTest:
 			return 1 // HTCLIENT, so button messages arrive here
-		case 0x0021: // WM_MOUSEACTIVATE
+		case wmMouseActivate:
 			return 3 // MA_NOACTIVATE
-		case 0x0201: // WM_LBUTTONDOWN
-			user32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&cursor)))
-			user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+		case wmLButtonDown:
+			getCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
+			getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
 			overlayGrab = point{cursor.X - rect.Left, cursor.Y - rect.Top}
 			overlayDragging = true
-			user32.NewProc("SetCapture").Call(hwnd)
+			setCapture.Call(hwnd)
 			return 0
-		case 0x0200: // WM_MOUSEMOVE
+		case wmMouseMove:
 			if overlayDragging {
-				user32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&cursor)))
-				setWindowPos.Call(hwnd, 0, uintptr(cursor.X-overlayGrab.X), uintptr(cursor.Y-overlayGrab.Y), 0, 0, 0x0001|0x0004|0x0010)
+				getCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
+				setWindowPos.Call(hwnd, 0, uintptr(cursor.X-overlayGrab.X), uintptr(cursor.Y-overlayGrab.Y), 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
 				return 0
 			}
-		case 0x0202, 0x0215: // WM_LBUTTONUP, WM_CAPTURECHANGED
+		case wmLButtonUp, wmCaptureChanged:
 			if overlayDragging {
 				overlayDragging = false
-				if msg == 0x0202 {
-					user32.NewProc("ReleaseCapture").Call()
+				if msg == wmLButtonUp {
+					releaseCapture.Call()
 				}
-				user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+				getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
 				if overlayMoved != nil {
 					overlayMoved(int(rect.Left-practiceBase.X), int(rect.Top-practiceBase.Y))
 				}
@@ -330,19 +184,18 @@ var overlayProc = windows.NewCallback(func(hwnd, msg, wparam, lparam uintptr) ui
 			}
 		}
 	}
-	result, _, _ := user32.NewProc("DefWindowProcW").Call(hwnd, msg, wparam, lparam)
+	result, _, _ := defWindowProc.Call(hwnd, msg, wparam, lparam)
 	return result
 })
 
 // Must be called on a thread that keeps pumping messages (or owns the window).
 func createPracticeWindow() (uintptr, error) {
 	cls, _ := windows.UTF16PtrFromString("STATIC")
-	// layered | transparent | noactivate | toolwindow | topmost; WS_POPUP
-	hwnd, _, err := createWindow.Call(0x00080000|0x20|0x08000000|0x80|0x8, uintptr(unsafe.Pointer(cls)), 0, 0x80000000, 0, 0, 0, 0, 0, 0, 0, 0)
+	hwnd, _, err := createWindow.Call(wsExLayered|clickThrough|wsExToolWindow|wsExTopmost, uintptr(unsafe.Pointer(cls)), 0, wsPopup, 0, 0, 0, 0, 0, 0, 0, 0)
 	if hwnd == 0 {
 		return 0, fmt.Errorf("create practice overlay: %w", err)
 	}
-	setWindowLong.Call(hwnd, ^uintptr(3), overlayProc) // GWLP_WNDPROC
+	setWindowLong.Call(hwnd, gwlpWndProc, overlayProc)
 	return hwnd, nil
 }
 
@@ -374,34 +227,45 @@ func startOverlayWindow() error {
 // Screen position of the crosshair: the middle of Apex's client area, or of the
 // monitor holding our window when the game isn't running.
 func crosshairPoint() (int32, int32) {
-	for _, name := range []string{"Apex Legends", "Apex Legendsâ„¢"} {
+	for _, name := range apexTitles {
 		title, _ := windows.UTF16PtrFromString(name)
-		hwnd, _, _ := user32.NewProc("FindWindowW").Call(0, uintptr(unsafe.Pointer(title)))
-		if minimized, _, _ := user32.NewProc("IsIconic").Call(hwnd); hwnd == 0 || minimized != 0 {
+		hwnd, _, _ := findWindow.Call(0, uintptr(unsafe.Pointer(title)))
+		if minimized, _, _ := isIconic.Call(hwnd); hwnd == 0 || minimized != 0 {
 			continue
 		}
-		var client struct{ Left, Top, Right, Bottom int32 }
-		user32.NewProc("GetClientRect").Call(hwnd, uintptr(unsafe.Pointer(&client)))
+		var client windows.Rect
+		getClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client)))
 		middle := point{client.Right / 2, client.Bottom / 2}
-		if ok, _, _ := user32.NewProc("ClientToScreen").Call(hwnd, uintptr(unsafe.Pointer(&middle))); ok != 0 && client.Right > 0 {
+		if ok, _, _ := clientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&middle))); ok != 0 && client.Right > 0 {
 			return middle.X, middle.Y
 		}
 	}
 	var info struct {
 		Size          uint32
-		Monitor, Work struct{ Left, Top, Right, Bottom int32 }
+		Monitor, Work windows.Rect
 		Flags         uint32
 	}
 	info.Size = uint32(unsafe.Sizeof(info))
-	monitor, _, _ := user32.NewProc("MonitorFromWindow").Call(mainWindow, 2) // nearest
-	user32.NewProc("GetMonitorInfoW").Call(monitor, uintptr(unsafe.Pointer(&info)))
+	monitor, _, _ := monitorFromWindow.Call(mainWindow, 2) // MONITOR_DEFAULTTONEAREST
+	getMonitorInfo.Call(monitor, uintptr(unsafe.Pointer(&info)))
 	return (info.Monitor.Left + info.Monitor.Right) / 2, (info.Monitor.Top + info.Monitor.Bottom) / 2
+}
+
+// desktopRect is the rectangle that spans every monitor.
+func desktopRect() windows.Rect {
+	metric := func(index uintptr) int32 {
+		value, _, _ := getSystemMetrics.Call(index)
+		return int32(value)
+	}
+	// SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN
+	left, top, width, height := metric(76), metric(77), metric(78), metric(79)
+	return windows.Rect{Left: left, Top: top, Right: left + width, Bottom: top + height}
 }
 
 // Puts the midpoint between the arrows on the crosshair, shifted by the user's
 // saved offset. An offset that would leave the desktop is ignored.
 func placeOverlay(s Settings) {
-	practiceDPI, _, _ = user32.NewProc("GetDpiForWindow").Call(mainWindow)
+	practiceDPI, _, _ = getDpiForWindow.Call(mainWindow)
 	if practiceDPI == 0 {
 		practiceDPI = 96
 	}
@@ -410,18 +274,16 @@ func placeOverlay(s Settings) {
 	x, y := crosshairPoint()
 	practiceBase = point{x - width/2, y - int32(math.Round(anchorY(s)*scale))}
 	left, top := practiceBase.X+int32(s.OffsetX), practiceBase.Y+int32(s.OffsetY)
-	metric := user32.NewProc("GetSystemMetrics")
-	screenLeft, _, _ := metric.Call(76)
-	screenTop, _, _ := metric.Call(77)
-	screenWidth, _, _ := metric.Call(78)
-	screenHeight, _, _ := metric.Call(79)
-	if left+width <= int32(screenLeft) || top+height <= int32(screenTop) || left >= int32(screenLeft)+int32(screenWidth) || top >= int32(screenTop)+int32(screenHeight) {
+	if desktop := desktopRect(); left+width <= desktop.Left || top+height <= desktop.Top || left >= desktop.Right || top >= desktop.Bottom {
 		left, top = practiceBase.X, practiceBase.Y
 	}
-	practiceRect.Left, practiceRect.Top, practiceRect.Right, practiceRect.Bottom = left, top, left+width, top+height
+	practiceRect = windows.Rect{Left: left, Top: top, Right: left + width, Bottom: top + height}
 	practicePlaced, practiceFrameValid = false, false
 }
 
+// setOverlayMode shows the overlay in the given mode, placed by the settings,
+// and the settings window to match: minimised for practice, visible otherwise.
+// The overlay stays invisible until renderPractice gives it its first frame.
 func setOverlayMode(mode int, s Settings) error {
 	if mainWindow == 0 {
 		mainWindow = ownWindow()
@@ -429,35 +291,35 @@ func setOverlayMode(mode int, s Settings) error {
 			return fmt.Errorf("overlay window not found")
 		}
 	}
-	showWindow := user32.NewProc("ShowWindow")
-	// Async for the Wails window: its UI thread may be waiting on our lock.
-	showAsync := user32.NewProc("ShowWindowAsync")
+	// The Wails window is only ever shown asynchronously: its UI thread may be
+	// waiting on our lock.
 	overlayMovable.Store(mode == overlayMove)
 	if mode == overlayHidden {
-		showWindow.Call(practiceWindow, 0)
-		showAsync.Call(mainWindow, 5)
+		showWindow.Call(practiceWindow, windows.SW_HIDE)
+		showWindowAsync.Call(mainWindow, windows.SW_SHOW)
 		return nil
 	}
 	if practiceWindow == 0 {
 		return fmt.Errorf("practice overlay unavailable")
 	}
 	placeOverlay(s)
-	extended, _, _ := getWindowLong.Call(practiceWindow, ^uintptr(19))
+	extended, _, _ := getWindowLong.Call(practiceWindow, gwlExStyle)
 	if mode == overlayMove {
-		extended &^= 0x20 | 0x08000000
+		extended &^= clickThrough
 	} else {
-		extended |= 0x20 | 0x08000000 // click-through, never focused
+		extended |= clickThrough
 	}
-	setWindowLong.Call(practiceWindow, ^uintptr(19), extended)
-	showWindow.Call(practiceWindow, 4) // SW_SHOWNOACTIVATE; invisible until the first frame
+	setWindowLong.Call(practiceWindow, gwlExStyle, extended)
+	showWindow.Call(practiceWindow, windows.SW_SHOWNOACTIVATE)
 	// Above the settings panel too, so the overlay is never hidden behind it.
-	setWindowPos.Call(practiceWindow, ^uintptr(0), 0, 0, 0, 0, 0x0001|0x0002|0x0010)
+	const topmost = ^uintptr(0) // HWND_TOPMOST
+	setWindowPos.Call(practiceWindow, topmost, 0, 0, 0, 0, swpNoSize|swpNoMove|swpNoActivate)
 	switch mode {
 	case overlayPractice:
 		// Minimised rather than hidden, so the app keeps its taskbar button.
-		showAsync.Call(mainWindow, 6)
+		showWindowAsync.Call(mainWindow, windows.SW_MINIMIZE)
 	case overlayPreview:
-		showAsync.Call(mainWindow, 5)
+		showWindowAsync.Call(mainWindow, windows.SW_SHOW)
 	}
 	return nil
 }
@@ -467,7 +329,7 @@ func mainMinimised() bool {
 	if mainWindow == 0 {
 		return false
 	}
-	minimised, _, _ := user32.NewProc("IsIconic").Call(mainWindow)
+	minimised, _, _ := isIconic.Call(mainWindow)
 	return minimised != 0
 }
 
@@ -475,23 +337,20 @@ func mainMinimised() bool {
 // its UI thread may be waiting on our lock.
 func restoreMainWindow() {
 	if mainMinimised() {
-		user32.NewProc("ShowWindowAsync").Call(mainWindow, 9) // SW_RESTORE
+		showWindowAsync.Call(mainWindow, windows.SW_RESTORE)
 	}
 }
+
+// restorePosition puts the settings window back where it was last time, or in
+// the middle of the screen if that place is no longer on the desktop.
 func restorePosition(ctx context.Context, x, y int) {
-	metric := user32.NewProc("GetSystemMetrics")
-	left, _, _ := metric.Call(76)
-	top, _, _ := metric.Call(77)
-	width, _, _ := metric.Call(78)
-	height, _, _ := metric.Call(79)
-	if x < int(int32(left)) || y < int(int32(top)) || x > int(int32(left))+int(width)-100 || y > int(int32(top))+int(height)-100 {
+	if desktop := desktopRect(); x < int(desktop.Left) || y < int(desktop.Top) || x > int(desktop.Right)-100 || y > int(desktop.Bottom)-100 {
 		wr.WindowCenter(ctx)
 		return
 	}
 	// Wails v2 SetPosition adds the current monitor's work-area origin; our saved
 	// WindowGetPosition values are already absolute screen coordinates.
-	hwnd := ownWindow()
-	if hwnd != 0 {
-		setWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, 0x0001|0x0004|0x0010)
+	if hwnd := ownWindow(); hwnd != 0 {
+		setWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
 	}
 }

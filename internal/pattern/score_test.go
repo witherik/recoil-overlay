@@ -74,7 +74,7 @@ func TestEvaluate(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := Evaluate(R301(), test.player, test.end)
+			got := Evaluate(r301(), test.player, test.end)
 			if len(got.Switches) != len(test.want) {
 				t.Fatalf("switches = %+v, want %+v", got.Switches, test.want)
 			}
@@ -108,15 +108,6 @@ func TestNeutralPhaseAcceptsAnyInput(t *testing.T) {
 		if len(got.Switches) != 2 || got.Switches[0] != test.want {
 			t.Errorf("%s: %+v", test.name, got.Switches)
 		}
-	}
-}
-
-func TestEvaluateSkipsNeutralPhases(t *testing.T) {
-	phases := []Phase{{"", 350}, {"right", 500}, {"left", 500}}
-	got := Evaluate(phases, []Segment{{0, 370, ""}, {370, 850, "right"}, {850, 1350, "left"}}, 1350)
-	want := []Change{{350, "right", 20, false}, {850, "left", 0, false}}
-	if len(got.Switches) != 2 || got.Switches[0] != want[0] || got.Switches[1] != want[1] || got.TotalMS != 20 {
-		t.Fatalf("got %+v", got)
 	}
 }
 

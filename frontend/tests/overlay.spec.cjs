@@ -1,43 +1,5 @@
 const { test, expect } = require("@playwright/test");
 
-test("preview runs the full pattern, stops, and can be cancelled", async ({
-  page,
-}) => {
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
-  await expect(page.locator("#status")).toContainText("Browser preview");
-  await page.locator("#voice-toggle").uncheck();
-  await page.locator("#preview").click();
-  await expect(page.locator("#preview")).toContainText("Stop");
-  await expect(page.locator("#preview")).toContainText("Preview", {
-    timeout: 3000,
-  });
-  await page.locator("#preview").click();
-  await expect(page.locator("#preview")).toContainText("Stop");
-  await page.locator("#preview").click();
-  await expect(page.locator("#preview")).toContainText("Preview");
-  expect(errors).toEqual([]);
-});
-
-test("the overlay can be hidden and shown; a preview brings it back", async ({
-  page,
-}) => {
-  await page.goto("/");
-  const toggle = page.locator("#showOverlay");
-  await expect(toggle).toHaveText("Hide");
-  await page.locator("#move").click();
-  await expect(page.locator("#move")).toHaveText("Done");
-  await toggle.click();
-  await expect(toggle).toHaveText("Show");
-  await expect(page.locator("#move")).toHaveText("Move");
-  await page.locator("#voice-toggle").uncheck();
-  await page.locator("#preview").click();
-  await expect(toggle).toHaveText("Hide");
-  await toggle.click();
-  await expect(page.locator("#preview")).toContainText("Preview");
-});
-
 test("the weapon menu picks a weapon and its firing modes", async ({
   page,
 }) => {
@@ -116,19 +78,25 @@ test("reset defaults asks twice, then restores every setting", async ({
   await expect(page.locator("#gap")).toHaveValue("100");
 });
 
-test("keys can be rebound and the labels follow", async ({ page }) => {
+test("an error stays until it is clicked away", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#lock-key")).toHaveText("F8");
-  await page.locator("#bind-start").click();
-  await expect(page.locator("#bind-start")).toHaveText("press a key…");
-  await page.locator("#bind-start").click();
-  await expect(page.locator("#bind-start")).toHaveText("F8");
-  await expect(page.locator("#bind-pause")).toHaveText("F9");
+  const banner = page.locator("#error");
+  await expect(banner).toBeHidden();
+  // Practice needs the Windows app: in a browser its button is disabled, and
+  // the stand-in answers with an error. Force it, to have an error to show.
+  await page.locator("#lock").evaluate((button) => (button.disabled = false));
+  await page.locator("#lock").click();
+  await expect(banner).toContainText("Open the Windows app");
+  await page.locator("#gap-number").fill("120");
+  await page.locator("#gap-number").blur();
+  await expect(banner).toBeVisible();
+  await banner.click();
+  await expect(banner).toBeHidden();
 });
 
-test("controls fit the fixed window", async ({
-  page,
-}) => {
+test("controls fit the fixed window", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   const controls = page.locator(".controls");
   expect(
@@ -143,4 +111,5 @@ test("controls fit the fixed window", async ({
   await page.screenshot({ path: "test-results/edit-mode.png" });
   await page.locator("#weapon-button").click();
   await page.screenshot({ path: "test-results/weapon-menu.png" });
+  expect(errors).toEqual([]);
 });

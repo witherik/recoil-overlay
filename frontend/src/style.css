@@ -177,6 +177,7 @@ footer {
   background: var(--fill);
   box-shadow: inset 0 2px var(--miss);
   color: var(--miss);
+  cursor: pointer;
 }
 
 /* Weapon and firing mode */

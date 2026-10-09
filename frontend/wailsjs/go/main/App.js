@@ -10,6 +10,10 @@ export function CenterOverlay() {
   return window['go']['main']['App']['CenterOverlay']();
 }
 
+export function DismissError() {
+  return window['go']['main']['App']['DismissError']();
+}
+
 export function GetState() {
   return window['go']['main']['App']['GetState']();
 }
@@ -24,10 +28,6 @@ export function Quit() {
 
 export function ResetDefaults() {
   return window['go']['main']['App']['ResetDefaults']();
-}
-
-export function SavePosition() {
-  return window['go']['main']['App']['SavePosition']();
 }
 
 export function StopPreview() {
