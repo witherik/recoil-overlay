@@ -4,6 +4,10 @@ Recoil Practice is a Windows overlay for Apex Legends. It shows the strafe patte
 
 The program only reads the mouse and the keyboard. It does not send input to the game.
 
+https://github.com/user-attachments/assets/5512f863-05c0-4c45-9105-68176445ffe5
+
+![The settings window of Recoil Practice](docs/images/settings.png)
+
 ## Download
 
 1. Download `recoil-overlay.exe` from the [latest release](../../releases/latest).
