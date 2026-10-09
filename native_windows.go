@@ -406,7 +406,7 @@ func placeOverlay(s Settings) {
 	scale := float64(practiceDPI) / 96
 	width, height := overlaySize(s, scale)
 	x, y := crosshairPoint()
-	practiceBase = point{x - width/2, y - int32(math.Round(arrowAnchorY*scale))}
+	practiceBase = point{x - width/2, y - int32(math.Round(anchorY(s)*scale))}
 	left, top := practiceBase.X+int32(s.OffsetX), practiceBase.Y+int32(s.OffsetY)
 	metric := user32.NewProc("GetSystemMetrics")
 	screenLeft, _, _ := metric.Call(76)
@@ -452,7 +452,8 @@ func setOverlayMode(mode int, s Settings) error {
 	setWindowPos.Call(practiceWindow, ^uintptr(0), 0, 0, 0, 0, 0x0001|0x0002|0x0010)
 	switch mode {
 	case overlayPractice:
-		showAsync.Call(mainWindow, 0)
+		// Minimised rather than hidden, so the app keeps its taskbar button.
+		showAsync.Call(mainWindow, 6)
 	case overlayPreview:
 		showAsync.Call(mainWindow, 5)
 	}

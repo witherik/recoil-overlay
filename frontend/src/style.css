@@ -33,17 +33,17 @@
   --error-container: #93000a;
   --on-error-container: #ffdad6;
 }
-:root[data-theme="violet"] {
+:root[data-theme="purple"] {
   --primary: #d0bcff;
   --on-primary: #381e72;
   --tertiary: #f6c177;
 }
-:root[data-theme="ember"] {
-  --primary: #ffb4a2;
-  --on-primary: #561f12;
+:root[data-theme="red"] {
+  --primary: #ff8f85;
+  --on-primary: #5c1410;
   --tertiary: #7fd7e8;
 }
-:root[data-theme="ocean"] {
+:root[data-theme="blue"] {
   --primary: #93d4ff;
   --on-primary: #06243a;
   --tertiary: #ffa55c;
@@ -211,7 +211,7 @@ button:disabled,
 .weapon-bar {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -265,26 +265,23 @@ button:disabled,
 .weapon-button[aria-expanded="true"] > .glyph {
   transform: rotate(180deg);
 }
-/* Segmented button */
+/* Segmented button, as tall as the weapon button and on the same surface, so
+   the two read as one bar. */
 .modes {
   display: flex;
   flex: none;
+  gap: 2px;
 }
 .modes button {
-  height: 40px;
-  padding: 0 16px;
+  height: auto;
+  padding: 0 18px;
+  border-color: transparent;
   border-radius: 0;
+  background: var(--container-high);
   color: var(--on-surface);
-  font-size: 13px;
 }
-.modes button + button {
-  border-left: 0;
-}
-.modes button:first-child {
-  border-radius: 0;
-}
-.modes button:last-child {
-  border-radius: 0;
+.modes button:hover {
+  background: var(--container-highest);
 }
 .modes button.active {
   background: var(--primary-container);
@@ -385,47 +382,37 @@ button:disabled,
 .card.off :disabled {
   opacity: 1;
 }
-/* Switch: an outlined track with a small handle when off, a filled track
-   with a larger handle when on. */
+/* Switch: the standard rounded one, the only round shape in the window. */
 .switch {
   appearance: none;
   flex: none;
   position: relative;
-  width: 44px;
-  height: 26px;
+  width: 40px;
+  height: 22px;
   margin: 0;
-  border: 2px solid var(--outline);
-  border-radius: 0;
-  background: var(--container-highest);
+  border-radius: 11px;
+  background: var(--outline-variant);
   cursor: pointer;
-  transition:
-    background 0.12s,
-    border-color 0.12s;
+  transition: background-color 0.15s;
 }
 .switch::after {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 5px;
-  width: 12px;
-  height: 12px;
-  border-radius: 0;
-  background: var(--outline);
-  transform: translateY(-50%);
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--on-surface-variant);
   transition:
-    left 0.12s,
-    width 0.12s,
-    height 0.12s,
-    background 0.12s;
+    transform 0.15s,
+    background-color 0.15s;
 }
 .switch:checked {
-  border-color: var(--primary);
   background: var(--primary);
 }
 .switch:checked::after {
-  left: 20px;
-  width: 18px;
-  height: 18px;
+  transform: translateX(18px);
   background: var(--on-primary);
 }
 .field .switch {

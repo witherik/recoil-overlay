@@ -58,6 +58,10 @@ test("the weapon menu picks a weapon and its firing modes", async ({
   ]);
   await page.locator("#modes button", { hasText: "Turbocharged" }).click();
   await expect(page.locator("#modes .active")).toHaveText("Turbocharged");
+  const picker = await page.locator("#weapon-button").boundingBox();
+  const modes = await page.locator("#modes .active").boundingBox();
+  expect([modes.y, modes.height]).toEqual([picker.y, picker.height]);
+  await page.screenshot({ path: "test-results/modes.png" });
   await expect(page.locator("#version")).toContainText("HAVOC");
   await page.locator("#weapon-button").click();
   await page.keyboard.press("Escape");
@@ -72,8 +76,8 @@ test("sliders take typed values, clamped to their range", async ({ page }) => {
   await expect(page.locator("#timelineOffset")).toHaveValue("250");
   await typed.fill("9999");
   await typed.blur();
-  await expect(typed).toHaveValue("400");
-  await expect(page.locator("#timelineOffset")).toHaveValue("400");
+  await expect(typed).toHaveValue("800");
+  await expect(page.locator("#timelineOffset")).toHaveValue("800");
   await page.locator("#gap").fill("120");
   await expect(page.locator("#gap-number")).toHaveValue("120");
   // Switching a category off greys out its settings without losing them.
@@ -82,15 +86,15 @@ test("sliders take typed values, clamped to their range", async ({ page }) => {
   await expect(page.locator(".card.timeline")).toHaveClass(/off/);
   await expect(page.locator(".card.arrows")).not.toHaveClass(/off/);
   await page.screenshot({ path: "test-results/category-off.png" });
-  await expect(typed).toHaveValue("400");
+  await expect(typed).toHaveValue("800");
   await page.locator("#voiceStyle").selectOption("tones");
   await expect(page.locator("#voiceStyle")).toHaveValue("tones");
-  await page.locator("#theme").selectOption("violet");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "violet");
-  await page.screenshot({ path: "test-results/theme-violet.png" });
-  await page.locator("#theme").selectOption("ember");
+  await page.locator("#theme").selectOption("purple");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "purple");
+  await page.screenshot({ path: "test-results/theme-purple.png" });
+  await page.locator("#theme").selectOption("red");
   await page.waitForTimeout(300); // let the colour transitions settle
-  await page.screenshot({ path: "test-results/theme-ember.png" });
+  await page.screenshot({ path: "test-results/theme-red.png" });
 });
 
 test("reset defaults asks twice, then restores every setting", async ({
@@ -99,7 +103,7 @@ test("reset defaults asks twice, then restores every setting", async ({
   await page.goto("/");
   await page.locator("#gap-number").fill("200");
   await page.locator("#gap-number").blur();
-  await page.locator("#theme").selectOption("ocean");
+  await page.locator("#theme").selectOption("blue");
   const reset = page.locator("#reset");
   await reset.click();
   await expect(reset).toHaveText("Click again to reset");
@@ -107,7 +111,7 @@ test("reset defaults asks twice, then restores every setting", async ({
   await reset.click();
   await expect(reset).toHaveText("Reset defaults");
   await expect(page.locator("#gap")).toHaveValue("100");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "mint");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "green");
   // Left alone, the first click expires.
   await reset.click();
   await expect(reset).toHaveText("Reset defaults", { timeout: 4000 });

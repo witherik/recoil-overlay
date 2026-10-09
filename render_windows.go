@@ -27,15 +27,31 @@ import (
 var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
 var overlayFont, _ = opentype.Parse(goregular.TTF)
 
-// Vertical midpoint of the arrows, in unscaled pixels from the window top. The
-// frontend stage uses the same anchor.
+// Vertical midpoint of the arrows, in unscaled pixels from the window top,
+// while the timeline is below them or hidden.
 const arrowAnchorY = 142.0
+
+// Baseline of the status line under the arrows, used when the timeline is above.
+const statusBelow = 89.0
+
+// A negative timeline spacing puts the timeline above the arrows, that far
+// from their top edge.
+func timelineAbove(s Settings) bool { return s.Timeline && s.TimelineOffset < 0 }
+
+// anchorY is the vertical midpoint of the arrows within the overlay window. It
+// moves down to make room when the timeline sits above them.
+func anchorY(s Settings) float64 {
+	if timelineAbove(s) {
+		return 4 + timelineHeight - float64(s.TimelineOffset) + float64(s.ArrowSize)/2
+	}
+	return arrowAnchorY
+}
 
 // Opacity of the arrow that is not currently called for (the frontend matches).
 const inactiveArrowAlpha = 40
 
 // Height of the timeline box: header, expected track, player track, ticks.
-const timelineHeight = 110.0
+const timelineHeight = 114.0
 
 var practiceFrameValid bool
 var lastPracticeFrame frameKey
@@ -67,8 +83,11 @@ type blendFunction struct{ Operation, Flags, Alpha, Format byte }
 
 // Pixel size of the overlay window: just large enough for what is drawn.
 func overlaySize(s Settings, scale float64) (int32, int32) {
-	height := arrowAnchorY + float64(s.ArrowSize)/2 + 12
-	if s.Timeline {
+	height := anchorY(s) + float64(s.ArrowSize)/2 + 12
+	switch {
+	case timelineAbove(s):
+		height = anchorY(s) + statusBelow + 12
+	case s.Timeline:
 		height += float64(s.TimelineOffset) + timelineHeight - 4
 	}
 	return int32(math.Round(float64(max(464, s.TimelineWidth+44)) * scale)), int32(math.Round(height * scale))
@@ -152,17 +171,32 @@ func renderPractice(s Snapshot) error {
 	return nil
 }
 
-func scoreSummary(score pattern.Score) string {
+// A label is one run of text in the timeline header.
+type label struct {
+	text string
+	size float64
+	col  color.NRGBA
+}
+
+var missColor, closeColor = color.NRGBA{255, 180, 171, 255}, color.NRGBA{255, 213, 110, 255}
+
+// scoreLabels lays the spray's result out as a scoreboard: the total time the
+// switches were mistimed by, in large plain figures (the overlay's face has
+// fixed-width digits, so they hold their place), with its captions small
+// beside it.
+func scoreLabels(score pattern.Score, text, dim color.NRGBA) []label {
 	made := len(score.Switches) - score.Missed
 	switch {
 	case len(score.Switches) == 0:
-		return "NO SWITCHES"
+		return []label{{"NO SWITCHES", 12, dim}}
 	case made == 0:
-		return fmt.Sprintf("%d MISSED", score.Missed)
-	case score.Missed > 0:
-		return fmt.Sprintf("TOTAL %d ms / %d MISSED", score.TotalMS, score.Missed)
+		return []label{{fmt.Sprintf("%d", score.Missed), 20, text}, {" MISSED", 10, dim}}
 	}
-	return fmt.Sprintf("TOTAL %d ms", score.TotalMS)
+	labels := []label{{"TOTAL DEVIATION  ", 10, dim}, {fmt.Sprintf("%d", score.TotalMS), 20, text}, {" ms", 10, dim}}
+	if score.Missed > 0 {
+		labels = append(labels, label{fmt.Sprintf("   %d MISSED", score.Missed), 10, missColor})
+	}
+	return labels
 }
 func deviationLabel(change pattern.Change, compact bool) string {
 	if change.Missed {
@@ -182,9 +216,9 @@ func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
 	}
 	switch {
 	case change.Missed || off > 100:
-		return color.NRGBA{255, 180, 171, 255}
+		return missColor
 	case off > 40:
-		return color.NRGBA{255, 213, 110, 255}
+		return closeColor
 	}
 	return good
 }
@@ -194,10 +228,10 @@ func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
 type palette struct{ right, left color.NRGBA }
 
 var palettes = map[string]palette{
-	"mint":   {color.NRGBA{112, 227, 192, 255}, color.NRGBA{244, 161, 140, 255}},
-	"violet": {color.NRGBA{208, 188, 255, 255}, color.NRGBA{246, 193, 119, 255}},
-	"ember":  {color.NRGBA{255, 138, 112, 255}, color.NRGBA{127, 215, 232, 255}},
-	"ocean":  {color.NRGBA{147, 212, 255, 255}, color.NRGBA{232, 101, 10, 255}},
+	"green":  {color.NRGBA{112, 227, 192, 255}, color.NRGBA{244, 161, 140, 255}},
+	"purple": {color.NRGBA{208, 188, 255, 255}, color.NRGBA{246, 193, 119, 255}},
+	"red":    {color.NRGBA{255, 120, 108, 255}, color.NRGBA{127, 215, 232, 255}},
+	"blue":   {color.NRGBA{147, 212, 255, 255}, color.NRGBA{232, 101, 10, 255}},
 }
 
 // shade is the dark fill behind a segment of the expected bar: its direction's
@@ -225,14 +259,10 @@ func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
 	d := font.Drawer{Dst: c.image, Src: image.NewUniform(col), Face: face, Dot: fixed.P(int(math.Round(x*c.scale)), int(math.Round(y*c.scale)))}
 	d.DrawString(text)
 }
-func (c canvas) face(size float64) font.Face {
-	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
-	return face
-}
 
 // width measures text in unscaled pixels.
 func (c canvas) width(size float64, text string) float64 {
-	face := c.face(size)
+	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
 	defer face.Close()
 	return float64(font.MeasureString(face, text).Ceil()) / c.scale
 }
@@ -279,21 +309,22 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	center := float64(width) / scale / 2
 	scheme, known := palettes[s.Settings.Theme]
 	if !known {
-		scheme = palettes["mint"]
+		scheme = palettes["green"]
 	}
 	right, left := scheme.right, scheme.left
 	muted := color.NRGBA{184, 184, 184, 255}
 	text := color.NRGBA{237, 237, 237, 255}
 	dim := color.NRGBA{178, 178, 178, 255}
 	size := float64(s.Settings.ArrowSize)
+	anchor, above := anchorY(s.Settings), timelineAbove(s.Settings)
 	gap := float64(s.Settings.Gap)
 	if s.Moving {
 		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
 		w, h := float64(width)/scale, float64(height)/scale
 		c.rect(0, 0, w, h, right)
 		c.rect(1, 1, w-2, h-2, color.NRGBA{16, 16, 16, 150})
-		c.line(center-9, arrowAnchorY, center+9, arrowAnchorY, 1.5, text)
-		c.line(center, arrowAnchorY-9, center, arrowAnchorY+9, 1.5, text)
+		c.line(center-9, anchor, center+9, anchor, 1.5, text)
+		c.line(center, anchor-9, center, anchor+9, 1.5, text)
 	}
 	for _, direction := range []string{"left", "right"} {
 		if !s.Settings.Arrows {
@@ -312,7 +343,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			}
 		}
 		px := func(v float64) float64 { return x - size/2 + v*size/64 }
-		py := func(v float64) float64 { return arrowAnchorY - size/2 + v*size/64 }
+		py := func(v float64) float64 { return anchor - size/2 + v*size/64 }
 		coords := [][4]float64{{37, 12, 17, 32}, {17, 32, 37, 52}, {18, 32, 52, 32}}
 		if direction == "right" {
 			coords = [][4]float64{{27, 12, 47, 32}, {47, 32, 27, 52}, {46, 32, 12, 32}}
@@ -332,16 +363,24 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		for _, l := range coords {
 			layer.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
 		}
-		box := image.Rect(int((x-size)*scale), int((arrowAnchorY-size)*scale), int((x+size)*scale), int((arrowAnchorY+size)*scale))
+		box := image.Rect(int((x-size)*scale), int((anchor-size)*scale), int((x+size)*scale), int((anchor+size)*scale))
 		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
 	}
-	c.centeredText(center, 61, 11, practiceStatus(s), color.NRGBA{222, 222, 222, 230})
+	// The status line keeps clear of the timeline: it takes the other side.
+	statusY := anchor - 81
+	if above {
+		statusY = anchor + statusBelow
+	}
+	c.centeredText(center, statusY, 11, practiceStatus(s), color.NRGBA{222, 222, 222, 230})
 	// Optionally clear the view while shooting; the timeline returns on release.
 	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
 	if s.Settings.Timeline && !firing {
 		w := math.Min(float64(s.Settings.TimelineWidth), float64(width)/scale-44)
 		x := center - w/2
-		y := arrowAnchorY + size/2 + float64(s.Settings.TimelineOffset)
+		y := anchor + size/2 + float64(s.Settings.TimelineOffset)
+		if above {
+			y = anchor - size/2 + float64(s.Settings.TimelineOffset) - timelineHeight
+		}
 		box := color.NRGBA{16, 16, 16, 228}
 		c.rect(x, y, w, timelineHeight, box)
 		total := math.Max(1, float64(s.TotalMS))
@@ -349,14 +388,23 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		// Between sprays the last one stays up for review, with its score.
 		review := !s.Running && s.Score != nil
 		playheadMS := s.ElapsedMS
-		summary := fmt.Sprintf("%.2f / %.2f s", float64(s.ElapsedMS)/1000, total/1000)
+		summary := []label{{fmt.Sprintf("%.2f / %.2f s", float64(s.ElapsedMS)/1000, total/1000), 12, dim}}
 		if review {
 			playheadMS = s.PlayerEndMS
-			summary = scoreSummary(*s.Score)
+			summary = scoreLabels(*s.Score, text, dim)
 		}
-		c.text(x+w-12-c.width(12, summary), y+19, 12, summary, dim)
+		summaryX := x + w - 12
+		for _, part := range summary {
+			summaryX -= c.width(part.size, part.text)
+		}
+		for at, i := summaryX, 0; i < len(summary); i++ {
+			part := summary[i]
+			// Large figures sit a little lower so they centre on the small text.
+			c.text(at, y+19+(part.size-12)/4, part.size, part.text, part.col)
+			at += c.width(part.size, part.text)
+		}
 		// The mode gives way when a narrow timeline has no room for it.
-		if modeX := x + 12 + c.width(12, s.Weapon) + 9; modeX+c.width(10, s.Mode)+9 <= x+w-12-c.width(12, summary) {
+		if modeX := x + 12 + c.width(12, s.Weapon) + 9; modeX+c.width(10, s.Mode)+9 <= summaryX {
 			c.text(modeX, y+19, 10, s.Mode, dim)
 		}
 		track := w - 24
@@ -410,7 +458,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		}
 		head := x + 12 + track*math.Min(1, float64(playheadMS)/total)
 		// Tick labels sit under each phase start; in review they become deviations.
-		compact := narrowest < 56
+		compact := narrowest < 70
 		startMS = 0
 		for i, phase := range s.Phases {
 			label, col := fmt.Sprintf("%.2f", startMS/1000), dim
@@ -427,16 +475,16 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 				}
 			}
 			if i == 0 {
-				c.text(x+12, y+100, 10, label, col)
+				c.text(x+12, y+103, 13, label, col)
 			} else {
-				c.centeredText(x+12+track*startMS/total, y+100, 10, label, col)
+				c.centeredText(x+12+track*startMS/total, y+103, 13, label, col)
 			}
 			startMS += float64(phase.DurationMS)
 		}
 		c.rect(head-1, y+27, 2, 58, color.NRGBA{255, 255, 255, 255})
-		if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 56 {
+		if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 70 {
 			end := fmt.Sprintf("%.2f s", total/1000)
-			c.text(x+w-12-c.width(10, end), y+100, 10, end, dim)
+			c.text(x+w-12-c.width(13, end), y+103, 13, end, dim)
 		}
 	}
 	return img

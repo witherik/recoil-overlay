@@ -8,11 +8,13 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 - [ ] Confirm the overlay is already on screen over the crosshair, reads `EDIT MODE / F8 TO PRACTICE`, and lets clicks through to whatever is under it.
 - [ ] In edit mode, change arrow spacing, size, opacity, timeline spacing and timeline width, by slider and by typing a value. Confirm the overlay follows each change.
 - [ ] Change **Colors** and confirm the settings window and the overlay both switch scheme.
+- [ ] Set the timeline spacing to a negative value. Confirm the timeline moves above the arrows, the status line moves below them, and the arrows stay on the crosshair.
 - [ ] Open the weapon menu, pick another weapon and, where offered, another firing mode. Confirm the overlay timeline changes with it.
 - [ ] Click **Hide** and confirm the overlay disappears; **Show** brings it back. Hide it, click **Preview pattern**, and confirm it returns and plays the pattern.
 - [ ] Click **Move overlay**, drag the overlay by its backdrop, and click **Done moving**. Confirm it stays where you left it, without the backdrop, and is still there in practice mode. Click **Center** and confirm it returns to the crosshair.
 - [ ] Click **–** in the title bar. Confirm the settings window goes to the taskbar and the overlay disappears; restore it from the taskbar and confirm the overlay returns. Minimise again, press F8 twice, and confirm practice starts and then the settings window comes back up.
-- [ ] Press F8 to enter practice mode. Confirm the settings window hides, the overlay is click-through and stays above the game, and the arrows sit either side of the crosshair.
+- [ ] Press F8 to enter practice mode. Confirm the settings window minimises to the taskbar, the overlay is click-through and stays above the game, and the arrows sit either side of the crosshair.
+- [ ] In practice mode, click the app in the taskbar. Confirm practice ends and the settings window comes back with the overlay preview.
 - [ ] With the R-301 selected and Apex Legends in the foreground, hold left-click. Confirm the right arrow starts immediately, the left arrow begins at 800 ms, and the right arrow returns at 1,330 ms.
 - [ ] Select the HAVOC in Normal mode. Confirm the timeline starts with a grey 350 ms phase, neither arrow is lit and no word is spoken until the first strafe is due. Switch to Turbocharged and confirm the grey phase disappears.
 - [ ] Release left-click during a run. Confirm the timeline resets and later phases do not appear after release.
@@ -23,8 +25,8 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 
 ## Strafe reading and score
 
-- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills in the scheme's two colours (mint for right and coral for left by default) as the playhead moves, and stays grey while neither or both keys are held.
-- [ ] Release. Confirm the spray stays on the timeline with a signed deviation under each switch and the total deviation in the header, until the next click.
+- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills in the scheme's two colours (green for right and orange for left by default) as the playhead moves, and stays grey while neither or both keys are held.
+- [ ] Release. Confirm the spray stays on the timeline with a signed deviation under each switch and the total deviation in large figures in the header, until the next click.
 - [ ] Rebind a strafe key in edit mode, then confirm the new key is read and the old one is ignored. Press Escape while rebinding and confirm nothing changes.
 - [ ] Rebind **Start practice** to another key. Confirm it enters practice but does not leave it, and that the old key still ends practice. Hold the new key down and confirm it does not flip modes repeatedly.
 - [ ] Rebind **Disable / enable** and confirm the overlay status line names the new key. Try to bind a strafe key to a practice key and confirm it is refused.

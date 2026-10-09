@@ -211,7 +211,8 @@ func (a *App) handleInputLocked(e inputEvent) {
 		// A failed input thread must never strand the user behind a click-through window.
 		if !a.editing {
 			if err := setOverlayMode(overlayHidden, a.settings); err == nil {
-				a.editing, a.shown = true, false
+				a.editing, a.shown, a.minimised = true, false, false
+				restoreMainWindow()
 			}
 		}
 	}
@@ -444,12 +445,17 @@ func (a *App) overlayModeLocked() int {
 
 // minimiseLocked follows the settings window into and out of the taskbar. While
 // editing, the overlay is only a preview, so it goes away with the window.
+// Practice keeps the window minimised, so bringing it back from the taskbar
+// ends practice.
 func (a *App) minimiseLocked(minimised bool) {
 	if minimised == a.minimised {
 		return
 	}
 	a.minimised = minimised
 	if !a.editing {
+		if !minimised {
+			a.toggleLocked()
+		}
 		return
 	}
 	if minimised {
@@ -470,7 +476,10 @@ func (a *App) emitLocked() {
 			a.cancelLocked()
 			a.moving, a.shown = false, false
 			if restoreErr := setOverlayMode(overlayHidden, a.settings); restoreErr == nil {
-				a.editing = true
+				if !a.editing {
+					a.editing, a.minimised = true, false
+					restoreMainWindow()
+				}
 			} else {
 				a.err += "; " + restoreErr.Error()
 			}
@@ -492,6 +501,9 @@ func (a *App) toggleLocked() {
 	a.binding = ""
 	a.syncKeysLocked()
 	moving, minimised := a.moving, a.minimised
+	if a.editing {
+		a.captureGeometryLocked() // before practice minimises the window
+	}
 	a.editing, a.moving = !a.editing, false
 	if a.editing {
 		// Leaving practice always brings the editor back, even from the taskbar.
@@ -504,9 +516,6 @@ func (a *App) toggleLocked() {
 		return
 	}
 	a.cancelLocked()
-	if !a.editing {
-		a.captureGeometryLocked()
-	}
 }
 func (a *App) ToggleMode() Snapshot {
 	a.mu.Lock()

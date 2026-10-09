@@ -26,7 +26,7 @@ const mock = {
     gap: 100,
     arrowSize: 42,
     opacity: 90,
-    theme: "mint",
+    theme: "green",
     arrows: true,
     timeline: true,
     timelineIdle: false,

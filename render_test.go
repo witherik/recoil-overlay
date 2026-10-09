@@ -74,3 +74,25 @@ func TestPlayerTrackAndReviewLabels(t *testing.T) {
 		t.Fatalf("neutral and unplayed time should stay grey: %v %v", neutral, ahead)
 	}
 }
+
+func TestTimelineAboveTheArrows(t *testing.T) {
+	s := Snapshot{Settings: defaultSettings(), Armed: true, Focused: true, Direction: "right", Phases: pattern.R301(), TotalMS: 2210}
+	s.Settings.TimelineOffset = -40
+	width, height := overlaySize(s.Settings, 1)
+	anchor := int(anchorY(s.Settings))
+	img := drawPractice(s, int(width), int(height), 1)
+	// From the top: timeline, 40 px gap, arrows, status line.
+	bottom := anchor - s.Settings.ArrowSize/2 - 40
+	if img.RGBAAt(232, bottom-5).A == 0 || img.RGBAAt(232, 6).A == 0 {
+		t.Fatal("timeline should end 40 px above the arrows")
+	}
+	if img.RGBAAt(232, bottom+3).A != 0 || img.RGBAAt(232, anchor).A != 0 {
+		t.Fatal("the gap and the crosshair must stay clear")
+	}
+	if img.RGBAAt(232+71, anchor).A == 0 {
+		t.Fatal("arrow should be drawn at the anchor")
+	}
+	if anchorY(defaultSettings()) != arrowAnchorY {
+		t.Fatal("a timeline below must not move the arrows")
+	}
+}

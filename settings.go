@@ -48,7 +48,7 @@ var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 250, "ton
 const defaultTimelineWidth = 420
 
 func defaultSettings() Settings {
-	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "mint", Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
+	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -66,9 +66,9 @@ func (s Settings) normalized() Settings {
 	s.ArrowSize = clamp(s.ArrowSize, 24, 72)
 	s.Opacity = clamp(s.Opacity, 20, 100)
 	if _, known := palettes[s.Theme]; !known {
-		s.Theme = "mint"
+		s.Theme = "green"
 	}
-	s.TimelineOffset = clamp(s.TimelineOffset, 12, 400)
+	s.TimelineOffset = clamp(s.TimelineOffset, -800, 800)
 	s.TimelineWidth = clamp(s.TimelineWidth, 280, 800)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
 	s.OffsetY = clamp(s.OffsetY, -10000, 10000)

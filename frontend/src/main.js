@@ -26,7 +26,8 @@ const icon = (name) =>
 const sliders = {
   gap: ["Spacing", 40, 300, 2, "px"],
   arrowSize: ["Size", 24, 72, 2, "px"],
-  timelineOffset: ["Spacing", 12, 400, 2, "px"],
+  // Negative puts the timeline above the arrows.
+  timelineOffset: ["Spacing", -800, 800, 2, "px"],
   timelineWidth: ["Width", 280, 800, 4, "px"],
   opacity: ["Opacity", 20, 100, 1, "%"],
 };
@@ -38,10 +39,10 @@ const card = (name, title, toggle, body) =>
   `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
 // Colour schemes; the overlay's colours for each are in render_windows.go.
 const themes = {
-  mint: "Mint & coral",
-  violet: "Violet & gold",
-  ember: "Ember & cyan",
-  ocean: "Blue & orange",
+  green: "Green & orange",
+  purple: "Purple & yellow",
+  red: "Red & teal",
+  blue: "Blue & orange",
 };
 const bindings = {
   left: "Strafe left",
@@ -230,7 +231,8 @@ function render(s) {
   $("showOverlay").textContent = s.shown ? "Hide" : "Show";
   $("move").textContent = s.moving ? "Done" : "Move";
   $("move").classList.toggle("active", s.moving);
-  $("lock").disabled = !s.inputReady || saving || pending;
+  // Not tied to unsaved edits: clicking it saves them first.
+  $("lock").disabled = !s.inputReady;
   let status = !native
     ? "Browser preview · global input unavailable"
     : !s.inputReady
@@ -278,12 +280,14 @@ async function flushSettings() {
   }
   if (pending) await flushSettings();
 }
-function change(key, value) {
+// Records a changed setting. Unless send is false, it is saved, and so shown
+// on the overlay, shortly after.
+function change(key, value, send = true) {
   localSettings = { ...localSettings, [key]: value };
   pending = true;
   render(state);
   clearTimeout(debounce);
-  debounce = setTimeout(() => flushSettings().catch(error), 180);
+  if (send) debounce = setTimeout(() => flushSettings().catch(error), 180);
 }
 const clamped = (input) =>
   Math.max(
@@ -291,7 +295,12 @@ const clamped = (input) =>
     Math.min(Number(input.max), Math.round(Number(input.value)) || 0),
   );
 for (const key in sliders) {
-  $(key).addEventListener("input", (e) => change(key, Number(e.target.value)));
+  // While a slider is dragged only its number follows; the overlay is updated
+  // once, when it is let go.
+  $(key).addEventListener("input", (e) =>
+    change(key, Number(e.target.value), false),
+  );
+  $(key).addEventListener("change", (e) => change(key, Number(e.target.value)));
   // Typed values apply once complete, so a half-typed number is not clamped.
   $(`${key}-number`).addEventListener("change", (e) => {
     e.target.value = clamped(e.target);

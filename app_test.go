@@ -340,7 +340,7 @@ func TestMinimisingHidesOnlyThePreview(t *testing.T) {
 func TestResetDefaultsKeepsTheWindowInPlace(t *testing.T) {
 	a, _ := testApp()
 	a.editing = true
-	a.settings.Gap, a.settings.Theme, a.settings.StartKey, a.settings.OffsetX = 200, "ocean", 0x41, 50
+	a.settings.Gap, a.settings.Theme, a.settings.StartKey, a.settings.OffsetX = 200, "blue", 0x41, 50
 	a.settings.X, a.settings.Width, a.settings.Positioned = 300, 800, true
 	want := defaultSettings()
 	want.X, want.Width, want.Positioned = 300, 800, true
