@@ -55,9 +55,11 @@ var naturalRight []byte
 // The tones are synthesized: a low beep for left, an octave higher for right.
 var toneLeft, toneRight = toneClip(440), toneClip(880)
 
-// toneClip is a 60 ms sine beep as a mono PCM16 WAV, faded so it does not click.
+// toneClip is a 60 ms sine beep as a mono PCM16 WAV. It reaches full volume
+// within half a millisecond, so it is heard the moment it is played, and fades
+// out over 5 ms so it does not click.
 func toneClip(hz float64) []byte {
-	const rate, samples, fade = 22050, 22050 * 60 / 1000, 110
+	const rate, samples, attack, release = 22050, 22050 * 60 / 1000, 11, 110
 	clip := make([]byte, 44+samples*2)
 	copy(clip, "RIFF")
 	binary.LittleEndian.PutUint32(clip[4:], uint32(len(clip)-8))
@@ -72,7 +74,7 @@ func toneClip(hz float64) []byte {
 	copy(clip[36:], "data")
 	binary.LittleEndian.PutUint32(clip[40:], samples*2)
 	for i := 0; i < samples; i++ {
-		gain := math.Min(1, math.Min(float64(i+1), float64(samples-i))/fade)
+		gain := math.Min(1, math.Min(float64(i+1)/attack, float64(samples-i)/release))
 		value := 0.6 * 32767 * gain * math.Sin(2*math.Pi*hz*float64(i)/rate)
 		binary.LittleEndian.PutUint16(clip[44+2*i:], uint16(int16(value)))
 	}

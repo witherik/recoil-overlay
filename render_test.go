@@ -15,23 +15,23 @@ func TestPracticeCanvasKeepsCrosshairTransparent(t *testing.T) {
 		if img.RGBAAt(int(310*dpi), int(142*dpi)).A != 0 {
 			t.Fatal("crosshair must be transparent")
 		}
-		if img.RGBAAt(int(310*dpi), int(235*dpi)).A == 0 {
+		if img.RGBAAt(int(310*dpi), int(363*dpi)).A == 0 {
 			t.Fatal("timeline should be drawn")
 		}
 		if img.RGBAAt(int(381*dpi), int(142*dpi)).A == 0 {
 			t.Fatal("arrow should be drawn")
 		}
 		s.Settings.TimelineIdle, s.Held = true, true
-		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(235*dpi)).A != 0 {
+		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(363*dpi)).A != 0 {
 			t.Fatal("timeline should hide while shooting")
 		}
 		s.Held = false
-		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(235*dpi)).A == 0 {
+		if drawPractice(s, int(620*dpi), int(600*dpi), dpi).RGBAAt(int(310*dpi), int(363*dpi)).A == 0 {
 			t.Fatal("timeline should return on release")
 		}
 		s.Settings.Timeline, s.Settings.Arrows = false, false
 		hidden := drawPractice(s, int(620*dpi), int(600*dpi), dpi)
-		if hidden.RGBAAt(int(310*dpi), int(235*dpi)).A != 0 {
+		if hidden.RGBAAt(int(310*dpi), int(363*dpi)).A != 0 {
 			t.Fatal("hidden timeline leaves pixels")
 		}
 		if hidden.RGBAAt(int(381*dpi), int(142*dpi)).A != 0 {
@@ -56,9 +56,9 @@ func TestPracticeCanvasKeepsCrosshairTransparent(t *testing.T) {
 func TestPlayerTrackAndReviewLabels(t *testing.T) {
 	s := Snapshot{Settings: defaultSettings(), Armed: true, Focused: true, Direction: "right", Running: true, ElapsedMS: 1000, Phases: pattern.R301(), TotalMS: 2210}
 	s.Player = []pattern.Segment{{StartMS: 0, EndMS: 800, Direction: "right"}, {StartMS: 800, EndMS: 900, Direction: ""}, {StartMS: 900, EndMS: 1000, Direction: "left"}}
-	img := drawPractice(s, 464, 300, 1)
+	img := drawPractice(s, 464, 500, 1)
 	// The player row sits 58 px below the top of the timeline box.
-	y := int(arrowAnchorY + 21 + 32 + 58 + 7)
+	y := int(arrowAnchorY + 21 + 160 + 58 + 7)
 	at := func(ms float64) color.RGBA { return img.RGBAAt(int(232-210+12+396*ms/2210), y) }
 	// The cut at each switch lines up with the gap in the expected bar above.
 	for _, ms := range []float64{800, 1330} {

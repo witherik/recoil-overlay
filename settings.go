@@ -39,16 +39,18 @@ type Settings struct {
 }
 
 // The fast spoken clips are over within about 75 ms, so by default each word
-// finishes just as its direction change arrives.
-const defaultVoiceLeadMS = 75
+// is all but finished as its direction change arrives.
+const defaultVoiceLeadMS = 60
 
-// voiceLeads is the default lead of each voice style: roughly its clip length.
-var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 250, "tones": 60}
+// voiceLeads is the default lead of each voice style. A word needs time to be
+// heard before its switch; a tone is understood at once, so it sounds on the
+// switch itself.
+var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 125, "tones": 0}
 
 const defaultTimelineWidth = 420
 
 func defaultSettings() Settings {
-	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
+	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
 }
 func clamp(v, low, high int) int {
 	if v < low {

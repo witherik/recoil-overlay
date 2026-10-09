@@ -57,7 +57,7 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
   - **Fast voice** (default): "left" and "right" compressed so each word starts within 1 ms and is effectively over by 75 ms. Synthesized with Microsoft David Desktop at its fastest rate, trimmed, time-compressed without changing pitch, and normalised in volume.
   - **Natural voice**: the same words at the normal speaking rate, about 250 ms each.
   - **Tones**: a 60 ms beep, low for left and an octave higher for right.
-- **Lead** is how long before a direction change its cue starts, from 0 to 350 ms. It defaults to the length of the chosen sound (75, 250 or 60 ms), so the cue finishes just as the change arrives; a lead you have set yourself is kept when you switch sound.
+- **Lead** is how long before a direction change its cue starts, from 0 to 350 ms. Its default depends on the sound: 60 ms for the fast voice and 125 ms for the natural one, so the word is heard before the change, and 0 ms for tones, which sound on the change itself; a lead you have set yourself is kept when you switch sound.
 
 The settings window groups everything into Arrows, Timeline, Overlay, Voice and Keys. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control. The **–** button in the title bar minimises the settings window to the taskbar. In edit mode the overlay preview goes with it and returns when you restore the window. Practice mode itself keeps the settings window minimised, so the app stays in the taskbar; clicking it there ends practice and brings the window back, the same as the end-practice key.
 
