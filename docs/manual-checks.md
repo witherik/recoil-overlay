@@ -42,4 +42,4 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 ## Display scaling
 
 - [ ] Check the overlay at the display's normal DPI scaling and at another Windows scaling level, if available. Confirm arrows, timeline, labels, and input controls remain legible and positioned correctly.
-- [ ] Resize to the minimum supported app window size. Confirm every control is still reachable.
+- [ ] Confirm the settings window cannot be resized and shows every control without scrolling.

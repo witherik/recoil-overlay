@@ -25,8 +25,6 @@ export namespace main {
 	    voiceLeadMs: number;
 	    x: number;
 	    y: number;
-	    width: number;
-	    height: number;
 	    positioned: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -59,8 +57,6 @@ export namespace main {
 	        this.voiceLeadMs = source["voiceLeadMs"];
 	        this.x = source["x"];
 	        this.y = source["y"];
-	        this.width = source["width"];
-	        this.height = source["height"];
 	        this.positioned = source["positioned"];
 	    }
 	}

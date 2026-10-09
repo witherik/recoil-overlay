@@ -1,5 +1,10 @@
 import "./style.css";
 import { api, minimise, native, onState } from "./bridge";
+// Every colour, shared with the overlay (see theme.go).
+import theme from "./theme.json";
+const root = document.documentElement;
+for (const [name, value] of Object.entries(theme.neutral))
+  root.style.setProperty(`--${name}`, value);
 // Weapon icons are optional: a weapon without a file shows its name alone.
 const icons = Object.fromEntries(
   Object.entries(
@@ -11,11 +16,6 @@ const icons = Object.fromEntries(
   ).map(([path, url]) => [path.match(/([^/]+)\.svg$/)[1], url]),
 );
 const glyphs = {
-  arrows: "M9 7 4 12l5 5M4 12h16M15 7l5 5-5 5",
-  timeline: "M3 7h8v4H3zM13 7h8v4h-8zM3 15h12v3H3zM17 4v17",
-  overlay: "M3 5h18v12H3zM12 8v6M9 11h6M8 21h8",
-  voice: "M4 10v4h3l5 4V6l-5 4zM16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10",
-  keys: "M3 7h18v10H3zM7 10.5h.01M11 10.5h.01M15 10.5h.01M8 13.5h8",
   minimise: "M6 12h12",
   close: "M6 6l12 12M18 6 6 18",
   chevron: "m6 9 6 6 6-6",
@@ -36,14 +36,7 @@ const slider = (id) => {
   return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
 };
 const card = (name, title, toggle, body) =>
-  `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
-// Colour schemes; the overlay's colours for each are in render_windows.go.
-const themes = {
-  green: "Green & orange",
-  purple: "Purple & yellow",
-  red: "Red & teal",
-  blue: "Blue & orange",
-};
+  `<section class="card ${name}"><h2>${title}${toggle ? `<input id="${toggle}" type="checkbox" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
 const bindings = {
   left: "Strafe left",
   right: "Strafe right",
@@ -52,7 +45,7 @@ const bindings = {
   pause: "Disable / enable",
 };
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="minimise" class="close" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="close" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
+ <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.1</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
  <main class="controls">
   <section class="weapon-bar">
    <button id="weapon-button" class="weapon-button" aria-haspopup="listbox" aria-expanded="false"><img id="weapon-icon" alt="" hidden><span class="weapon-text"><small>WEAPON</small><strong id="weapon-label"></strong></span>${icon("chevron")}</button>
@@ -61,20 +54,18 @@ document.querySelector("#app").innerHTML = `
   </section>
   <div class="cards">
    ${card("arrows", "Arrows", "arrows-toggle", slider("gap") + slider("arrowSize"))}
-   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="field wide" title="Hide the timeline in practice while left-click is held"><span>Hide while shooting</span><input id="timelineIdle-toggle" type="checkbox" class="switch"></label>`)}
+   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="field wide" title="Hide the timeline in practice while left-click is held"><span>Hide while shooting</span><input id="timelineIdle-toggle" type="checkbox"></label>`)}
    ${card(
      "overlay",
      "Overlay",
      "",
-     `<div class="field"><span>Colors</span><select id="theme" aria-label="Color scheme">${Object.entries(
-       themes,
-     )
-       .map(([id, name]) => `<option value="${id}">${name}</option>`)
+     `<div class="field"><span>Colors</span><select id="theme" aria-label="Color scheme">${theme.schemes
+       .map(({ id, name }) => `<option value="${id}">${name}</option>`)
        .join("")}</select></div>` +
        slider("opacity") +
-       `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay" class="mini"></button><button id="move" class="mini" title="Drag the overlay into place">Move</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></div>`,
+       `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay"></button><button id="move" title="Drag the overlay into place">Move</button><button id="centerOverlay" title="Put the overlay back on the crosshair">Center</button></div>`,
    )}
-   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="field wide" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><span>Opening cue</span><input id="voiceStart-toggle" type="checkbox" class="switch"></label>`)}
+   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="field wide" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><span>Opening cue</span><input id="voiceStart-toggle" type="checkbox"></label>`)}
    ${card(
      "keys",
      "Keys",
@@ -82,16 +73,16 @@ document.querySelector("#app").innerHTML = `
      `<div class="binds">${Object.entries(bindings)
        .map(
          ([id, label]) =>
-           `<div class="bind"><span>${label}</span><button id="bind-${id}" class="mini key"></button></div>`,
+           `<div class="bind"><span>${label}</span><button id="bind-${id}" class="key"></button></div>`,
        )
        .join("")}</div>`,
    )}
   </div>
-  <div class="actions"><button id="preview" class="secondary">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
+  <div class="actions"><button id="preview">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
   <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span> <span class="divider">·</span> <kbd id="help-pause"></kbd> disable / enable</p>
   <p id="error" role="alert" hidden></p>
  </main>
- <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button><span id="version" class="version"></span></footer>
+ <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button></footer>
 `;
 const $ = (id) => document.getElementById(id);
 let state,
@@ -183,17 +174,14 @@ function render(s) {
   state = s;
   if (!pending && !saving) localSettings = { ...s.settings };
   const config = localSettings || s.settings;
-  document.documentElement.dataset.theme = config.theme;
+  const scheme = theme.schemes.find((s) => s.id === config.theme);
+  root.dataset.theme = scheme.id;
+  root.style.setProperty("--right", scheme.right);
+  root.style.setProperty("--left", scheme.left);
   $("theme").value = config.theme;
-  for (const id in sliders) {
+  for (const id in sliders)
     for (const input of [$(id), $(`${id}-number`)])
       if (document.activeElement !== input) input.value = config[id];
-    const [, min, max] = sliders[id];
-    $(id).style.setProperty(
-      "--p",
-      `${((config[id] - min) / (max - min)) * 100}%`,
-    );
-  }
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
   $("arrows-toggle").checked = config.arrows;
@@ -214,12 +202,11 @@ function render(s) {
     ))
       control.disabled = !on;
   }
-  $("version").textContent = `${s.weapon} · v0.1`;
   syncWeapon(config);
   for (const id in bindings) {
     $(`bind-${id}`).textContent =
       s.binding === id ? "press a key…" : s[`${id}Key`] || "?";
-    $(`bind-${id}`).classList.toggle("active", s.binding === id);
+    $(`bind-${id}`).classList.toggle("waiting", s.binding === id);
   }
   $("lock-key").textContent = s.startKey;
   $("help-start").textContent = s.startKey;
@@ -365,7 +352,7 @@ function armReset(on) {
   clearTimeout(resetArmed);
   resetArmed = on && setTimeout(() => armReset(false), 3000);
   $("reset").textContent = on ? "Click again to reset" : "Reset defaults";
-  $("reset").classList.toggle("active", Boolean(on));
+  $("reset").classList.toggle("waiting", Boolean(on));
 }
 $("reset").onclick = async () => {
   if (!resetArmed) return armReset(true);

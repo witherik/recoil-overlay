@@ -33,8 +33,6 @@ type Settings struct {
 	VoiceLeadMS    int    `json:"voiceLeadMs"`
 	X              int    `json:"x"`
 	Y              int    `json:"y"`
-	Width          int    `json:"width"`
-	Height         int    `json:"height"`
 	Positioned     bool   `json:"positioned"`
 }
 
@@ -50,7 +48,7 @@ var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 125, "ton
 const defaultTimelineWidth = 420
 
 func defaultSettings() Settings {
-	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
+	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green", Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -84,8 +82,6 @@ func (s Settings) normalized() Settings {
 		s.VoiceStyle = "fast"
 	}
 	s.VoiceLeadMS = clamp(s.VoiceLeadMS, 0, 350)
-	s.Width = clamp(s.Width, 520, 1400)
-	s.Height = clamp(s.Height, 440, 1200)
 	return s
 }
 func settingsPath() string {

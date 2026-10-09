@@ -1,0 +1,18 @@
+{
+  "neutral": {
+    "bg": "#101010",
+    "panel": "#1a1a1a",
+    "fill": "#2c2c2c",
+    "raised": "#383838",
+    "line": "#8e8e8e",
+    "dim": "#b2b2b2",
+    "text": "#ededed",
+    "miss": "#ffb4ab",
+    "near": "#ffd56e"
+  },
+  "schemes": [
+    { "id": "green", "name": "Green & orange", "right": "#70e3c0", "left": "#f4a18c" },
+    { "id": "purple", "name": "Purple & yellow", "right": "#d0bcff", "left": "#f6c177" },
+    { "id": "blue", "name": "Blue & red", "right": "#93d4ff", "left": "#ff786c" }
+  ]
+}

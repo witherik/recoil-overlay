@@ -59,10 +59,9 @@ test("the weapon menu picks a weapon and its firing modes", async ({
   await page.locator("#modes button", { hasText: "Turbocharged" }).click();
   await expect(page.locator("#modes .active")).toHaveText("Turbocharged");
   const picker = await page.locator("#weapon-button").boundingBox();
-  const modes = await page.locator("#modes .active").boundingBox();
+  const modes = await page.locator("#modes").boundingBox();
   expect([modes.y, modes.height]).toEqual([picker.y, picker.height]);
   await page.screenshot({ path: "test-results/modes.png" });
-  await expect(page.locator("#version")).toContainText("HAVOC");
   await page.locator("#weapon-button").click();
   await page.keyboard.press("Escape");
   await expect(page.locator("#weapon-menu")).toBeHidden();
@@ -92,9 +91,8 @@ test("sliders take typed values, clamped to their range", async ({ page }) => {
   await page.locator("#theme").selectOption("purple");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "purple");
   await page.screenshot({ path: "test-results/theme-purple.png" });
-  await page.locator("#theme").selectOption("red");
-  await page.waitForTimeout(300); // let the colour transitions settle
-  await page.screenshot({ path: "test-results/theme-red.png" });
+  await page.locator("#theme").selectOption("blue");
+  await page.screenshot({ path: "test-results/theme-blue.png" });
 });
 
 test("reset defaults asks twice, then restores every setting", async ({
@@ -128,7 +126,7 @@ test("keys can be rebound and the labels follow", async ({ page }) => {
   await expect(page.locator("#bind-pause")).toHaveText("F9");
 });
 
-test("controls fit the default window and stay reachable at the minimum", async ({
+test("controls fit the fixed window", async ({
   page,
 }) => {
   await page.goto("/");
@@ -142,21 +140,7 @@ test("controls fit the default window and stay reachable at the minimum", async 
   expect(
     Math.abs(close.y + close.height / 2 - (bar.y + bar.height / 2)),
   ).toBeLessThan(1);
-  for (const size of [640, 520]) {
-    await page.setViewportSize({ width: size, height: 760 });
-    const sound = await page.locator("#voiceStyle").boundingBox();
-    expect(sound.x + sound.width).toBeLessThan(size - 22);
-  }
-  await page.setViewportSize({ width: 640, height: 760 });
   await page.screenshot({ path: "test-results/edit-mode.png" });
   await page.locator("#weapon-button").click();
   await page.screenshot({ path: "test-results/weapon-menu.png" });
-  await page.keyboard.press("Escape");
-  await page.setViewportSize({ width: 520, height: 440 });
-  await page.locator("#lock").scrollIntoViewIfNeeded();
-  for (const id of ["showOverlay", "voiceStyle", "bind-pause", "lock"]) {
-    const box = await page.locator("#" + id).boundingBox();
-    expect(box.x + box.width).toBeLessThanOrEqual(520);
-  }
-  await page.screenshot({ path: "test-results/minimum-size.png" });
 });

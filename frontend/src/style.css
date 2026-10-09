@@ -1,52 +1,13 @@
-@font-face {
-  font-family: Nunito;
-  src: url("./assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-/* Material 3 colour roles and components, dark, with square corners throughout
-   to match the overlay. A colour scheme supplies three colours: primary, the
-   colour drawn on it, and tertiary. Everything else is derived the Material
-   way: surfaces are the neutral base tinted with primary, more strongly the
-   higher they sit, and containers are a deeper mix of the same colour. The
-   overlay's own colours for each scheme are in render_windows.go. */
+/* The overlay's look, carried into the settings window: flat neutral greys,
+   square corners, and colour only for the two strafe directions. The colours
+   are in theme.json and set as variables by main.js; --right is also the
+   accent. A 2px bar on top marks a chosen control, as it marks a phase on the
+   overlay's timeline. */
 :root {
   color-scheme: dark;
-  font-family: "Segoe UI", Roboto, Nunito, sans-serif;
-  font-size: 14px;
-  color: var(--on-surface);
-  --primary: #70e3c0;
-  --on-primary: #00382b;
-  --tertiary: #f4a18c;
-  --base: #121212;
-  --surface: color-mix(in srgb, var(--primary) 4%, var(--base));
-  --container: color-mix(in srgb, var(--primary) 8%, var(--base));
-  --container-high: color-mix(in srgb, var(--primary) 12%, var(--base));
-  --container-highest: color-mix(in srgb, var(--primary) 17%, var(--base));
-  --primary-container: color-mix(in srgb, var(--primary) 30%, var(--base));
-  --on-primary-container: color-mix(in srgb, var(--primary) 70%, white);
-  --on-surface: #e6e6e6;
-  --on-surface-variant: #c4c7c5;
-  --outline: #8e918f;
-  --outline-variant: #444746;
-  --error-container: #93000a;
-  --on-error-container: #ffdad6;
-}
-:root[data-theme="purple"] {
-  --primary: #d0bcff;
-  --on-primary: #381e72;
-  --tertiary: #f6c177;
-}
-:root[data-theme="red"] {
-  --primary: #ff8f85;
-  --on-primary: #5c1410;
-  --tertiary: #7fd7e8;
-}
-:root[data-theme="blue"] {
-  --primary: #93d4ff;
-  --on-primary: #06243a;
-  --tertiary: #ffa55c;
+  accent-color: var(--right);
+  font: 13px "Segoe UI", sans-serif;
+  color: var(--text);
 }
 * {
   box-sizing: border-box;
@@ -66,286 +27,257 @@ body {
 #app {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0;
-  background: var(--surface);
+  border: 1px solid var(--fill);
+  background: var(--bg);
 }
+[hidden] {
+  display: none !important;
+}
+.left {
+  color: var(--left);
+}
+.right {
+  color: var(--right);
+}
+
+/* Controls. Checkboxes and sliders are the browser's own, in the accent. */
 button,
-input,
-select {
+select,
+input {
+  margin: 0;
   font: inherit;
   --wails-draggable: no-drag;
 }
-/* Outlined button by default; .primary is filled and .secondary is tonal. */
-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 24px;
-  border: 1px solid var(--outline);
+button,
+select,
+input[type="number"] {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
   border-radius: 0;
-  background: transparent;
-  color: var(--primary);
-  font-weight: 500;
-  letter-spacing: 0.1px;
+  background: var(--fill);
+  color: var(--text);
+}
+button,
+select,
+label,
+input:not([type="number"]) {
   cursor: pointer;
-  transition:
-    background 0.12s,
-    border-color 0.12s;
 }
-/* State layers: 8% of the content colour on hover, 12% when pressed. */
-button:hover {
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+:is(button, select, input[type="number"]):hover {
+  background: var(--raised);
 }
-button:active {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
+:focus-visible {
+  outline: 2px solid var(--right);
+  outline-offset: 1px;
 }
-button:disabled,
-:is(input, select):disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
+:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
-:is(button, input, select):focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.primary {
-  border-color: transparent;
-  background: var(--primary);
-  color: var(--on-primary);
+button.primary {
+  background: var(--right);
+  color: var(--bg);
 }
 .primary:hover {
-  background: color-mix(in srgb, var(--on-primary) 8%, var(--primary));
+  filter: brightness(1.1);
 }
-.primary:active {
-  background: color-mix(in srgb, var(--on-primary) 12%, var(--primary));
+.active,
+[aria-selected="true"] {
+  box-shadow: inset 0 2px var(--right);
 }
-.secondary {
-  border-color: transparent;
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+/* Waiting for a key press, or for the second click of a reset. */
+.waiting {
+  box-shadow: inset 0 2px var(--left);
+  color: var(--left);
 }
-.secondary:hover {
-  background: color-mix(
-    in srgb,
-    var(--on-primary-container) 8%,
-    var(--primary-container)
-  );
-}
-.mini {
-  height: 32px;
-  padding: 0 14px;
-  font-size: 13px;
-}
-.mini.active {
-  border-color: transparent;
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+.icon {
+  width: 32px;
+  padding: 0;
+  background: none;
+  color: var(--dim);
 }
 .glyph {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   flex: none;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+kbd {
+  font: inherit;
+  font-size: 12px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+
+/* Window */
+.toolbar,
+.brand,
+footer {
+  display: flex;
+  align-items: center;
 }
 .toolbar {
   flex: none;
-  height: 64px;
-  display: flex;
-  align-items: center;
+  height: 44px;
   justify-content: space-between;
-  padding: 0 12px 0 20px;
+  padding: 0 8px 0 16px;
   --wails-draggable: drag;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.brand-mark {
-  color: var(--primary);
-  font-size: 30px;
-  line-height: 1;
+  font-size: 18px;
 }
 .brand h1 {
-  font-size: 20px;
-  margin: 0;
-  font-weight: 400;
-  line-height: 1.2;
+  margin: 0 8px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
 }
-.eyebrow {
+.version {
   font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  color: var(--on-surface-variant);
-}
-.window-actions {
-  display: flex;
-  gap: 4px;
-}
-/* Icon button */
-.close {
-  width: 40px;
-  padding: 0;
-  border-color: transparent;
-  color: var(--on-surface-variant);
-}
-.close:hover {
-  background: color-mix(in srgb, var(--on-surface) 8%, transparent);
+  color: var(--dim);
 }
 .controls {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--outline-variant) transparent;
-  padding: 4px 20px 12px;
+  padding: 4px 16px 12px;
 }
-/* The weapon is the main choice, so it gets the largest control. */
+footer {
+  flex: none;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  border-top: 1px solid var(--fill);
+  color: var(--dim);
+  font-size: 12px;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--line);
+}
+.status-dot.live {
+  background: var(--right);
+}
+.reset {
+  height: 20px;
+  margin-left: auto;
+}
+#error {
+  position: fixed;
+  z-index: 4;
+  bottom: 36px;
+  left: 16px;
+  right: 16px;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--fill);
+  box-shadow: inset 0 2px var(--miss);
+  color: var(--miss);
+}
+
+/* Weapon and firing mode */
 .weapon-bar {
   position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 12px;
 }
 .weapon-button {
   flex: 1;
-  justify-content: flex-start;
-  gap: 16px;
-  height: 68px;
-  padding: 0 16px;
-  border-color: transparent;
-  border-radius: 0;
-  background: var(--container-high);
-  color: var(--on-surface);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
   text-align: left;
-  font-weight: 400;
-}
-.weapon-button:hover,
-.weapon-button[aria-expanded="true"] {
-  background: var(--container-highest);
 }
 /* The source icons are a mix of black and white fills; draw them all light. */
 .weapon-bar img {
   filter: brightness(0) invert(0.9);
+  object-fit: contain;
 }
 .weapon-button img {
-  height: 44px;
-  width: 112px;
-  object-fit: contain;
+  width: 96px;
+  height: 36px;
 }
 .weapon-text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
-.weapon-text small {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  color: var(--primary);
+.weapon-text small,
+.weapon-menu h3 {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dim);
 }
 .weapon-text strong {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 400;
-  line-height: 1.1;
 }
-.weapon-button > .glyph {
-  color: var(--on-surface-variant);
-  transition: transform 0.12s;
-}
-.weapon-button[aria-expanded="true"] > .glyph {
+.weapon-button[aria-expanded="true"] .glyph {
   transform: rotate(180deg);
 }
-/* Segmented button, as tall as the weapon button and on the same surface, so
-   the two read as one bar. */
+/* Stacked beside the weapon button and together as tall as it, so each mode
+   stays the size of an ordinary button. */
 .modes {
   display: flex;
-  flex: none;
+  flex-direction: column;
   gap: 2px;
 }
 .modes button {
+  flex: 1;
   height: auto;
-  padding: 0 18px;
-  border-color: transparent;
-  border-radius: 0;
-  background: var(--container-high);
-  color: var(--on-surface);
+  padding: 0 14px;
 }
-.modes button:hover {
-  background: var(--container-highest);
+/* A bar on top would sit between the two, so the chosen mode has it at the side. */
+.modes .active {
+  box-shadow: inset 2px 0 var(--right);
 }
-.modes button.active {
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
-/* Menu: a raised surface above the cards. */
 .weapon-menu {
   position: absolute;
   z-index: 3;
-  top: 74px;
+  top: 60px;
   left: 0;
   right: 0;
-  padding: 4px 16px 16px;
-  background: var(--container-highest);
-  border-radius: 0;
-  box-shadow:
-    0 2px 6px #0006,
-    0 12px 32px #0009;
+  padding: 0 12px 12px;
+  border: 1px solid var(--raised);
+  background: var(--bg);
 }
 .weapon-menu h3 {
-  margin: 12px 0 8px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  color: var(--on-surface-variant);
+  margin: 10px 0 6px;
 }
-.weapon-group {
+.weapon-group,
+.binds {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 .weapon-option {
-  flex-direction: column;
-  gap: 4px;
   height: auto;
-  min-height: 40px;
-  padding: 8px 4px;
-  border-color: var(--outline-variant);
-  border-radius: 0;
-  color: var(--on-surface);
-  font-size: 13px;
-  font-weight: 400;
+  padding: 6px 4px;
 }
+/* Every icon is cropped to its gun and fitted into the same 8:3 box, so long
+   guns come out equally long and none outgrows the rest. */
 .weapon-option img {
-  height: 26px;
-  width: 100%;
-  object-fit: contain;
+  display: block;
+  width: 64px;
+  height: 24px;
+  margin: 0 auto 2px;
 }
-.weapon-option[aria-selected="true"] {
-  border-color: transparent;
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-}
+
+/* Cards: a panel with a heading, a rule under it, then one row per setting. */
 .cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
-/* Filled card. Its banner sits one surface higher, so the category switch in
-   it outranks the switches inside the card. */
 .card {
-  overflow: hidden;
-  background: var(--container);
-  border-radius: 0;
+  padding: 2px 12px 10px;
+  background: var(--panel);
 }
 .card.keys {
   grid-column: 1 / -1;
@@ -353,299 +285,91 @@ button:disabled,
 .card h2 {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 40px;
-  margin: 0;
-  padding: 0 12px 0 16px;
-  background: var(--container-high);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
+  justify-content: space-between;
+  height: 30px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--fill);
+  font-size: 13px;
+  font-weight: 600;
 }
-.card h2 .glyph {
-  color: var(--primary);
-}
-.card h2 span {
-  flex: 1;
-}
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 16px 10px;
-}
-/* Switched off: everything fades except the switch that turns it back on. */
-.card.off .card-body,
-.card.off h2 > :not(.switch) {
-  opacity: 0.38;
+/* Switched off: everything fades except the checkbox that turns it back on. */
+.card.off .card-body {
+  opacity: 0.4;
 }
 .card.off :disabled {
   opacity: 1;
-}
-/* Switch: the standard rounded one, the only round shape in the window. */
-.switch {
-  appearance: none;
-  flex: none;
-  position: relative;
-  width: 40px;
-  height: 22px;
-  margin: 0;
-  border-radius: 11px;
-  background: var(--outline-variant);
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-.switch::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--on-surface-variant);
-  transition:
-    transform 0.15s,
-    background-color 0.15s;
-}
-.switch:checked {
-  background: var(--primary);
-}
-.switch:checked::after {
-  transform: translateX(18px);
-  background: var(--on-primary);
-}
-.field .switch {
-  transform: scale(0.8);
-  transform-origin: right center;
 }
 .slider,
 .field {
   display: flex;
   align-items: center;
-  min-height: 33px;
-  gap: 12px;
-  color: var(--on-surface);
+  gap: 10px;
+  min-height: 32px;
 }
 .slider > span:first-child,
 .field > span:first-child {
-  width: 56px;
+  width: 52px;
   flex: none;
 }
 /* A row whose label fills the width, with its control at the right edge. */
-.field.wide > span:first-child {
-  width: auto;
-  flex: 1;
-}
-label.field {
-  cursor: pointer;
-}
-.field small {
-  flex: 1;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-/* Slider: the active part of the track is filled up to --p, set per input. */
+.field.wide > span:first-child,
+.field small,
+.field select,
 .slider input[type="range"] {
-  appearance: none;
   flex: 1;
   min-width: 0;
-  height: 20px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
 }
-.slider input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 0;
-  background: linear-gradient(
-    to right,
-    var(--primary) var(--p, 50%),
-    var(--container-highest) var(--p, 50%)
-  );
-}
-.slider input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 6px;
-  height: 18px;
-  margin-top: -7px;
-  border-radius: 0;
-  background: var(--primary);
-  transition: box-shadow 0.12s;
-}
-.slider input[type="range"]:hover::-webkit-slider-thumb {
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 16%, transparent);
+.field small,
+.number i,
+.bind,
+.helper {
+  font-size: 12px;
+  font-style: normal;
+  color: var(--dim);
 }
 .number {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: none;
-}
-.number i {
-  width: 18px;
-  font-style: normal;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-/* Outlined text field and menu */
-.number input,
-.field select {
-  height: 30px;
-  color: var(--on-surface);
-  background: transparent;
-  border: 1px solid var(--outline);
-  border-radius: 0;
-  padding: 0 8px;
-  font-variant-numeric: tabular-nums;
-}
-:is(.number input, .field select):hover {
-  border-color: var(--on-surface);
-}
-:is(.number input, .field select):focus-visible {
-  outline: 0;
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px var(--primary);
 }
 .number input {
-  width: 54px;
+  width: 52px;
+  padding: 0 8px;
   text-align: right;
   appearance: textfield;
 }
-.number input::-webkit-inner-spin-button {
-  appearance: none;
+.number i {
+  width: 16px;
 }
-.field select {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-}
-.field select option {
-  background: var(--container-highest);
-}
-.row {
+.row,
+.actions {
   display: flex;
   gap: 8px;
   margin-top: 4px;
 }
-.row .mini {
+:is(.row, .actions) button {
   flex: 1;
-  padding: 0;
-}
-.binds {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
 }
 .bind {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
-  color: var(--on-surface-variant);
 }
 .key {
-  display: block;
-  padding: 0 8px;
-  border-radius: 0;
-  color: var(--on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Waiting for a key press is the one state that takes the tertiary colour. */
-.key.active {
-  border-color: var(--tertiary);
-  background: transparent;
-  color: var(--tertiary);
-}
 .actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 .actions button {
-  flex: 1;
-}
-kbd {
-  font:
-    500 12px "Segoe UI",
-    sans-serif;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0;
-  padding: 1px 6px;
-}
-.primary kbd {
-  border-color: color-mix(in srgb, var(--on-primary) 40%, transparent);
+  height: 36px;
 }
 .helper {
-  font-size: 12px;
-  line-height: 1.9;
+  margin: 10px 0 0;
   text-align: center;
-  color: var(--on-surface-variant);
-  margin: 6px 0 0;
 }
 .divider {
-  margin: 0 7px;
-}
-footer {
-  flex: none;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 20px;
-  border-top: 1px solid var(--outline-variant);
-  color: var(--on-surface-variant);
-  font-size: 12px;
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 0;
-  border: 1.5px solid var(--outline);
-}
-.status-dot.live {
-  border-color: var(--primary);
-  background: var(--primary);
-}
-/* Text button; it turns to the tertiary colour while it waits for a second click. */
-.reset {
-  height: 24px;
-  margin-left: auto;
-  padding: 0 10px;
-  border-color: transparent;
-  font-size: 12px;
-}
-.reset.active {
-  border-color: var(--tertiary);
-  color: var(--tertiary);
-}
-/* Snackbar-like, in the error container colours. */
-#error {
-  position: fixed;
-  bottom: 40px;
-  left: 16px;
-  right: 16px;
-  border-radius: 0;
-  background: var(--error-container);
-  color: var(--on-error-container);
-  padding: 12px 16px;
-  margin: 0;
-  z-index: 4;
-  box-shadow: 0 6px 18px #0008;
-}
-[hidden] {
-  display: none !important;
-}
-@media (max-width: 580px) {
-  .binds {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .weapon-group {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .weapon-bar {
-    flex-wrap: wrap;
-  }
+  margin: 0 6px;
 }

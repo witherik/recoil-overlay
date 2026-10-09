@@ -18,11 +18,9 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     windowTitle,
-		Width:     640,
-		Height:    760,
-		MinWidth:  520,
-		MinHeight: 440,
+		Title:  windowTitle,
+		Width:  600, // just fits the controls; see frontend/playwright.config.cjs
+		Height: 632,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -35,7 +33,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
-		DisableResize: false,
+		DisableResize: true,
 		Frameless:     true, // only false for debugging
 		AlwaysOnTop:   true,
 		Windows: &windows.Options{

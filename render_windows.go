@@ -8,6 +8,8 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"unsafe"
@@ -25,7 +27,18 @@ import (
 // placed over the crosshair; the OS then handles true click-through. Edit mode
 // shows the same window as its preview. See setOverlayMode for why the Wails window can't be used.
 var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
-var overlayFont, _ = opentype.Parse(goregular.TTF)
+
+// The overlay is set in Segoe UI, like the settings window. Go Regular stands
+// in if Windows has no copy of it.
+var overlayFont = func() *opentype.Font {
+	if b, err := os.ReadFile(filepath.Join(os.Getenv("WINDIR"), "Fonts", "segoeui.ttf")); err == nil {
+		if f, err := opentype.Parse(b); err == nil {
+			return f
+		}
+	}
+	f, _ := opentype.Parse(goregular.TTF)
+	return f
+}()
 
 // Vertical midpoint of the arrows, in unscaled pixels from the window top,
 // while the timeline is below them or hidden.
@@ -178,8 +191,6 @@ type label struct {
 	col  color.NRGBA
 }
 
-var missColor, closeColor = color.NRGBA{255, 180, 171, 255}, color.NRGBA{255, 213, 110, 255}
-
 // scoreLabels lays the spray's result out as a scoreboard: the total time the
 // switches were mistimed by, in large plain figures (the overlay's face has
 // fixed-width digits, so they hold their place), with its captions small
@@ -194,7 +205,7 @@ func scoreLabels(score pattern.Score, text, dim color.NRGBA) []label {
 	}
 	labels := []label{{"TOTAL DEVIATION  ", 10, dim}, {fmt.Sprintf("%d", score.TotalMS), 20, text}, {" ms", 10, dim}}
 	if score.Missed > 0 {
-		labels = append(labels, label{fmt.Sprintf("   %d MISSED", score.Missed), 10, missColor})
+		labels = append(labels, label{fmt.Sprintf("   %d MISSED", score.Missed), 10, ui.Miss})
 	}
 	return labels
 }
@@ -216,29 +227,18 @@ func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
 	}
 	switch {
 	case change.Missed || off > 100:
-		return missColor
+		return ui.Miss
 	case off > 40:
-		return closeColor
+		return ui.Near
 	}
 	return good
-}
-
-// A palette is the overlay's side of a colour scheme: one colour for each
-// strafe direction. The settings window's side is in frontend/src/style.css.
-type palette struct{ right, left color.NRGBA }
-
-var palettes = map[string]palette{
-	"green":  {color.NRGBA{112, 227, 192, 255}, color.NRGBA{244, 161, 140, 255}},
-	"purple": {color.NRGBA{208, 188, 255, 255}, color.NRGBA{246, 193, 119, 255}},
-	"red":    {color.NRGBA{255, 120, 108, 255}, color.NRGBA{127, 215, 232, 255}},
-	"blue":   {color.NRGBA{147, 212, 255, 255}, color.NRGBA{232, 101, 10, 255}},
 }
 
 // shade is the dark fill behind a segment of the expected bar: its direction's
 // colour, mostly mixed into the timeline box.
 func shade(c color.NRGBA) color.NRGBA {
-	mix := func(v uint8) uint8 { return uint8((int(v)*30 + 16*70) / 100) }
-	return color.NRGBA{mix(c.R), mix(c.G), mix(c.B), 255}
+	mix := func(v, bg uint8) uint8 { return uint8((int(v)*30 + int(bg)*70) / 100) }
+	return color.NRGBA{mix(c.R, ui.Bg.R), mix(c.G, ui.Bg.G), mix(c.B, ui.Bg.B), 255}
 }
 
 type canvas struct {
@@ -250,11 +250,20 @@ func (c canvas) rect(x, y, w, h float64, col color.NRGBA) {
 	r := image.Rect(int(math.Round(x*c.scale)), int(math.Round(y*c.scale)), int(math.Round((x+w)*c.scale)), int(math.Round((y+h)*c.scale)))
 	draw.Draw(c.image, r, image.NewUniform(col), image.Point{}, draw.Src)
 }
+
+// unkerned is a face without pair kerning. Segoe UI's pairs are sized for
+// large text; at the overlay's 10 to 13 px they pull letters such as the IAT of
+// DEVIATION into one another.
+type unkerned struct{ font.Face }
+
+func (unkerned) Kern(r0, r1 rune) fixed.Int26_6 { return 0 }
+
+func (c canvas) face(size float64) font.Face {
+	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72, Hinting: font.HintingFull})
+	return unkerned{face}
+}
 func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
-	face, err := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72, Hinting: font.HintingFull})
-	if err != nil {
-		return
-	}
+	face := c.face(size)
 	defer face.Close()
 	d := font.Drawer{Dst: c.image, Src: image.NewUniform(col), Face: face, Dot: fixed.P(int(math.Round(x*c.scale)), int(math.Round(y*c.scale)))}
 	d.DrawString(text)
@@ -262,18 +271,12 @@ func (c canvas) text(x, y, size float64, text string, col color.NRGBA) {
 
 // width measures text in unscaled pixels.
 func (c canvas) width(size float64, text string) float64 {
-	face, _ := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
+	face := c.face(size)
 	defer face.Close()
 	return float64(font.MeasureString(face, text).Ceil()) / c.scale
 }
 func (c canvas) centeredText(center, y, size float64, text string, col color.NRGBA) {
-	face, err := opentype.NewFace(overlayFont, &opentype.FaceOptions{Size: size * c.scale, DPI: 72})
-	if err != nil {
-		return
-	}
-	defer face.Close()
-	width := font.MeasureString(face, text).Ceil()
-	c.text(center-float64(width)/(2*c.scale), y, size, text, col)
+	c.text(center-c.width(size, text)/2, y, size, text, col)
 }
 func (c canvas) line(x1, y1, x2, y2, width float64, col color.NRGBA) {
 	x1 *= c.scale
@@ -312,9 +315,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		scheme = palettes["green"]
 	}
 	right, left := scheme.right, scheme.left
-	muted := color.NRGBA{184, 184, 184, 255}
-	text := color.NRGBA{237, 237, 237, 255}
-	dim := color.NRGBA{178, 178, 178, 255}
+	text, dim := ui.Text, ui.Dim
 	size := float64(s.Settings.ArrowSize)
 	anchor, above := anchorY(s.Settings), timelineAbove(s.Settings)
 	gap := float64(s.Settings.Gap)
@@ -322,7 +323,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
 		w, h := float64(width)/scale, float64(height)/scale
 		c.rect(0, 0, w, h, right)
-		c.rect(1, 1, w-2, h-2, color.NRGBA{16, 16, 16, 150})
+		c.rect(1, 1, w-2, h-2, alpha(ui.Bg, 150))
 		c.line(center-9, anchor, center+9, anchor, 1.5, text)
 		c.line(center, anchor-9, center, anchor+9, 1.5, text)
 	}
@@ -334,7 +335,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		if direction == "right" {
 			x = center + (gap+size)/2
 		}
-		col := muted
+		col := dim
 		if s.Armed && s.Direction == direction {
 			if direction == "right" {
 				col = right
@@ -348,9 +349,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		if direction == "right" {
 			coords = [][4]float64{{27, 12, 47, 32}, {47, 32, 27, 52}, {46, 32, 12, 32}}
 		}
-		if col != muted {
+		if col != dim {
 			for _, l := range coords {
-				c.line(px(l[0]), py(l[1])+1, px(l[2]), py(l[3])+1, 9*size/64, color.NRGBA{0, 0, 0, 170})
+				c.line(px(l[0]), py(l[1])+1, px(l[2]), py(l[3])+1, 9*size/64, alpha(ui.Bg, 170))
 			}
 			for _, l := range coords {
 				c.line(px(l[0]), py(l[1]), px(l[2]), py(l[3]), 7*size/64, col)
@@ -371,7 +372,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	if above {
 		statusY = anchor + statusBelow
 	}
-	c.centeredText(center, statusY, 11, practiceStatus(s), color.NRGBA{222, 222, 222, 230})
+	c.centeredText(center, statusY, 11, practiceStatus(s), text)
 	// Optionally clear the view while shooting; the timeline returns on release.
 	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
 	if s.Settings.Timeline && !firing {
@@ -381,7 +382,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		if above {
 			y = anchor - size/2 + float64(s.Settings.TimelineOffset) - timelineHeight
 		}
-		box := color.NRGBA{16, 16, 16, 228}
+		box := alpha(ui.Bg, 228)
 		c.rect(x, y, w, timelineHeight, box)
 		total := math.Max(1, float64(s.TotalMS))
 		c.text(x+12, y+19, 12, s.Weapon, text)
@@ -423,7 +424,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 				to -= cut / 2
 			}
 			// Neutral phases (fire without strafing) are grey.
-			letter, fill, accent := "-", color.NRGBA{56, 56, 56, 255}, color.NRGBA{142, 142, 142, 255}
+			letter, fill, accent := "-", ui.Raised, ui.Line
 			switch phase.Direction {
 			case "right":
 				letter, fill, accent = "R", shade(right), right
@@ -442,7 +443,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			startMS += duration
 		}
 		// The player's own strafes, on the same time axis; grey is neutral.
-		c.rect(x+12, y+58, track, 24, color.NRGBA{44, 44, 44, 255})
+		c.rect(x+12, y+58, track, 24, ui.Fill)
 		for _, segment := range s.Player {
 			fill := right
 			switch segment.Direction {
@@ -481,7 +482,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			}
 			startMS += float64(phase.DurationMS)
 		}
-		c.rect(head-1, y+27, 2, 58, color.NRGBA{255, 255, 255, 255})
+		c.rect(head-1, y+27, 2, 58, text)
 		if n := len(s.Phases); n > 0 && track*float64(s.Phases[n-1].DurationMS)/total >= 70 {
 			end := fmt.Sprintf("%.2f s", total/1000)
 			c.text(x+w-12-c.width(13, end), y+103, 13, end, dim)

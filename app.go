@@ -93,7 +93,6 @@ func (a *App) ready(ctx context.Context) {
 	a.mu.Lock()
 	s := a.settings
 	a.mu.Unlock()
-	wr.WindowSetSize(ctx, s.Width, s.Height)
 	if s.Positioned {
 		restorePosition(ctx, s.X, s.Y)
 	}
@@ -618,8 +617,6 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	s.StartKey = a.settings.StartKey
 	s.EndKey = a.settings.EndKey
 	s.PauseKey = a.settings.PauseKey
-	s.Width = a.settings.Width
-	s.Height = a.settings.Height
 	s = s.normalized()
 	// A lead still at its style's default follows a change of style.
 	if s.VoiceStyle != a.settings.VoiceStyle && s.VoiceLeadMS == voiceLeads[a.settings.VoiceStyle] {
@@ -646,7 +643,7 @@ func (a *App) ResetDefaults() Snapshot {
 	if a.editing {
 		a.cancelLocked()
 		s := defaultSettings()
-		s.X, s.Y, s.Width, s.Height, s.Positioned = a.settings.X, a.settings.Y, a.settings.Width, a.settings.Height, a.settings.Positioned
+		s.X, s.Y, s.Positioned = a.settings.X, a.settings.Y, a.settings.Positioned
 		a.settings = s
 		a.last = nil // the last spray may have been scored against another pattern
 		a.binding = ""
@@ -658,12 +655,11 @@ func (a *App) ResetDefaults() Snapshot {
 	return a.snapshotLocked()
 }
 func (a *App) captureGeometryLocked() {
-	// A minimised window reports a parked position and size; keep the last real one.
+	// A minimised window reports a parked position; keep the last real one.
 	if wr.WindowIsMinimised(a.ctx) {
 		return
 	}
 	a.settings.X, a.settings.Y = wr.WindowGetPosition(a.ctx)
-	a.settings.Width, a.settings.Height = wr.WindowGetSize(a.ctx)
 	a.settings.Positioned = true
 	if err := writeSettings(a.settings); err != nil {
 		a.err = "Settings could not be saved: " + err.Error()
