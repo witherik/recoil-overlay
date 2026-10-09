@@ -51,17 +51,10 @@ Build the program:
 
 The script installs the frontend packages, does the Go tests and builds `build\bin\recoil-overlay.exe`. Add `-Dev` to start the program in the Wails development mode.
 
-## Credits
-
-- This project is a fork of [superglide-overlay](https://github.com/AlexKimmel/superglide-overlay) by AlexKimmel (MIT License).
-- The weapon patterns and the weapon icons come from the [Apex recoil strafe trainer](https://www.apexrecoilstrafing.com/).
-- [Wails](https://wails.io/) supplies the window and the build tools.
+## Disclaimer
 
 Apex Legends is a trademark of Electronic Arts Inc. This project has no relation to Electronic Arts or Respawn Entertainment. The weapon icons in `frontend/src/assets/weapons` are their property, and the MIT License does not apply to them.
 
-## Maintenance
-
-The tests, the release procedure and the design are in the [maintainer notes](docs/maintaining.md).
 
 ## License
 
