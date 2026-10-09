@@ -36,6 +36,13 @@ const slider = (id) => {
 };
 const card = (name, title, toggle, body) =>
   `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
+// Colour schemes; the overlay's colours for each are in render_windows.go.
+const themes = {
+  mint: "Mint & coral",
+  violet: "Violet & gold",
+  ember: "Ember & cyan",
+  ocean: "Blue & orange",
+};
 const bindings = {
   left: "Strafe left",
   right: "Strafe right",
@@ -54,7 +61,18 @@ document.querySelector("#app").innerHTML = `
   <div class="cards">
    ${card("arrows", "Arrows", "arrows-toggle", slider("gap") + slider("arrowSize"))}
    ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="field wide" title="Hide the timeline in practice while left-click is held"><span>Hide while shooting</span><input id="timelineIdle-toggle" type="checkbox" class="switch"></label>`)}
-   ${card("overlay", "Overlay", "", slider("opacity") + `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay" class="mini"></button><button id="move" class="mini" title="Drag the overlay into place">Move</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></div>`)}
+   ${card(
+     "overlay",
+     "Overlay",
+     "",
+     `<div class="field"><span>Colors</span><select id="theme" aria-label="Color scheme">${Object.entries(
+       themes,
+     )
+       .map(([id, name]) => `<option value="${id}">${name}</option>`)
+       .join("")}</select></div>` +
+       slider("opacity") +
+       `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay" class="mini"></button><button id="move" class="mini" title="Drag the overlay into place">Move</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></div>`,
+   )}
    ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="field wide" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><span>Opening cue</span><input id="voiceStart-toggle" type="checkbox" class="switch"></label>`)}
    ${card(
      "keys",
@@ -72,7 +90,7 @@ document.querySelector("#app").innerHTML = `
   <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span> <span class="divider">·</span> <kbd id="help-pause"></kbd> disable / enable</p>
   <p id="error" role="alert" hidden></p>
  </main>
- <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><span id="version" class="version"></span></footer>
+ <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button><span id="version" class="version"></span></footer>
 `;
 const $ = (id) => document.getElementById(id);
 let state,
@@ -145,7 +163,6 @@ function syncWeapon(config) {
     modes.replaceChildren(
       ...weapon.modes.map((mode) => {
         const button = document.createElement("button");
-        button.className = "mini";
         button.setAttribute("role", "radio");
         button.dataset.mode = mode.id;
         button.textContent = mode.name;
@@ -165,9 +182,17 @@ function render(s) {
   state = s;
   if (!pending && !saving) localSettings = { ...s.settings };
   const config = localSettings || s.settings;
-  for (const id in sliders)
+  document.documentElement.dataset.theme = config.theme;
+  $("theme").value = config.theme;
+  for (const id in sliders) {
     for (const input of [$(id), $(`${id}-number`)])
       if (document.activeElement !== input) input.value = config[id];
+    const [, min, max] = sliders[id];
+    $(id).style.setProperty(
+      "--p",
+      `${((config[id] - min) / (max - min)) * 100}%`,
+    );
+  }
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
   $("arrows-toggle").checked = config.arrows;
@@ -288,6 +313,7 @@ for (const [id, key] of [
 $("voiceStyle").addEventListener("change", (e) =>
   change("voiceStyle", e.target.value),
 );
+$("theme").addEventListener("change", (e) => change("theme", e.target.value));
 $("weapon-button").onclick = () => {
   const open = $("weapon-menu").hidden;
   $("weapon-menu").hidden = !open;
@@ -324,6 +350,26 @@ for (const id in bindings)
     api.BindKey(id).then(render).catch(error);
   };
 $("minimise").onclick = minimise;
+// Resetting discards everything, so it asks for a second click first.
+let resetArmed;
+function armReset(on) {
+  clearTimeout(resetArmed);
+  resetArmed = on && setTimeout(() => armReset(false), 3000);
+  $("reset").textContent = on ? "Click again to reset" : "Reset defaults";
+  $("reset").classList.toggle("active", Boolean(on));
+}
+$("reset").onclick = async () => {
+  if (!resetArmed) return armReset(true);
+  armReset(false);
+  clearTimeout(debounce);
+  pending = false; // unsaved edits are being reset too
+  try {
+    if (savePromise) await savePromise;
+    render(await api.ResetDefaults());
+  } catch (e) {
+    error(e);
+  }
+};
 $("quit").onclick = () => api.Quit().catch(error);
 document.addEventListener("keydown", (e) => {
   if (e.code !== "Escape") return;

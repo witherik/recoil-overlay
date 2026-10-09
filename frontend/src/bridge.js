@@ -26,6 +26,7 @@ const mock = {
     gap: 100,
     arrowSize: 42,
     opacity: 90,
+    theme: "mint",
     arrows: true,
     timeline: true,
     timelineIdle: false,
@@ -64,6 +65,7 @@ const mock = {
   pauseKey: "F9",
   binding: "",
 };
+const defaults = structuredClone(mock.settings);
 let listener, timer, started, nextCue;
 const sounds = { left: new Audio(leftURL), right: new Audio(rightURL) };
 function stop() {
@@ -154,6 +156,12 @@ const browserAPI = {
       stop();
       mock.moving = false;
     }
+    return emit();
+  },
+  ResetDefaults: async () => {
+    stop();
+    mock.settings = structuredClone(defaults);
+    mock.weapon = "R-301";
     return emit();
   },
   CenterOverlay: async () => emit(),

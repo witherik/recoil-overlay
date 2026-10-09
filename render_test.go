@@ -67,7 +67,7 @@ func TestPlayerTrackAndReviewLabels(t *testing.T) {
 			t.Fatalf("cut at %v ms not aligned: %v above %v", ms, at(ms), above)
 		}
 	}
-	if at(400) != (color.RGBA{147, 212, 255, 255}) || at(950) != (color.RGBA{232, 101, 10, 255}) {
+	if at(400) != (color.RGBA{112, 227, 192, 255}) || at(950) != (color.RGBA{244, 161, 140, 255}) {
 		t.Fatalf("strafes not drawn: %v %v", at(400), at(950))
 	}
 	if neutral, ahead := at(850), at(1500); neutral != ahead || neutral == at(400) {

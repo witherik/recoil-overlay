@@ -5,24 +5,48 @@
   font-style: normal;
   font-display: swap;
 }
+/* Material 3 colour roles and components, dark, with square corners throughout
+   to match the overlay. A colour scheme supplies three colours: primary, the
+   colour drawn on it, and tertiary. Everything else is derived the Material
+   way: surfaces are the neutral base tinted with primary, more strongly the
+   higher they sit, and containers are a deeper mix of the same colour. The
+   overlay's own colours for each scheme are in render_windows.go. */
 :root {
-  font-family: "Segoe UI", Nunito, sans-serif;
-  color: var(--text);
+  color-scheme: dark;
+  font-family: "Segoe UI", Roboto, Nunito, sans-serif;
   font-size: 14px;
-  /* Neutral grey surfaces, lighter as they rise, carry most of the window.
-     One cool accent (the overlay's "right" blue) marks what is active, and its
-     complement, a warm orange, is kept for what needs attention. Text meets
-     WCAG AA on every surface, and state is never shown by hue alone. */
-  --text: #ededed;
-  --text-2: #bfbfbf;
-  --muted: #9c9c9c;
-  --surface: #2b2b2b;
-  --line: #404040;
-  --line-strong: #5e5e5e;
-  --field: #0d0d0d;
-  --accent: #93d4ff;
-  --on-accent: #06243a;
-  --warm: #ffa55c;
+  color: var(--on-surface);
+  --primary: #70e3c0;
+  --on-primary: #00382b;
+  --tertiary: #f4a18c;
+  --base: #121212;
+  --surface: color-mix(in srgb, var(--primary) 4%, var(--base));
+  --container: color-mix(in srgb, var(--primary) 8%, var(--base));
+  --container-high: color-mix(in srgb, var(--primary) 12%, var(--base));
+  --container-highest: color-mix(in srgb, var(--primary) 17%, var(--base));
+  --primary-container: color-mix(in srgb, var(--primary) 30%, var(--base));
+  --on-primary-container: color-mix(in srgb, var(--primary) 70%, white);
+  --on-surface: #e6e6e6;
+  --on-surface-variant: #c4c7c5;
+  --outline: #8e918f;
+  --outline-variant: #444746;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+}
+:root[data-theme="violet"] {
+  --primary: #d0bcff;
+  --on-primary: #381e72;
+  --tertiary: #f6c177;
+}
+:root[data-theme="ember"] {
+  --primary: #ffb4a2;
+  --on-primary: #561f12;
+  --tertiary: #7fd7e8;
+}
+:root[data-theme="ocean"] {
+  --primary: #93d4ff;
+  --on-primary: #06243a;
+  --tertiary: #ffa55c;
 }
 * {
   box-sizing: border-box;
@@ -36,48 +60,93 @@ body,
   overflow: hidden;
   background: transparent;
 }
-button,
-input,
-select {
-  font: inherit;
-  --wails-draggable: no-drag;
-}
-button {
-  cursor: pointer;
-  border: 1px solid var(--line);
-  color: var(--text);
-  background: var(--surface);
-  border-radius: 7px;
-  padding: 10px 14px;
-}
-button:hover {
-  filter: brightness(1.13);
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-:is(button, input, select):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 body {
   user-select: none;
 }
 #app {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: linear-gradient(
-    135deg,
-    rgba(29, 29, 29, 0.98),
-    rgba(15, 15, 15, 0.98)
+  border: 1px solid var(--outline-variant);
+  border-radius: 0;
+  background: var(--surface);
+}
+button,
+input,
+select {
+  font: inherit;
+  --wails-draggable: no-drag;
+}
+/* Outlined button by default; .primary is filled and .secondary is tonal. */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: 1px solid var(--outline);
+  border-radius: 0;
+  background: transparent;
+  color: var(--primary);
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+/* State layers: 8% of the content colour on hover, 12% when pressed. */
+button:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+button:active {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+button:disabled,
+:is(input, select):disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+:is(button, input, select):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.primary {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.primary:hover {
+  background: color-mix(in srgb, var(--on-primary) 8%, var(--primary));
+}
+.primary:active {
+  background: color-mix(in srgb, var(--on-primary) 12%, var(--primary));
+}
+.secondary {
+  border-color: transparent;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.secondary:hover {
+  background: color-mix(
+    in srgb,
+    var(--on-primary-container) 8%,
+    var(--primary-container)
   );
 }
+.mini {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.mini.active {
+  border-color: transparent;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
 .glyph {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex: none;
   fill: none;
   stroke: currentColor;
@@ -91,9 +160,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 0 22px;
+  padding: 0 12px 0 20px;
   --wails-draggable: drag;
-  border-bottom: 1px solid #ffffff0d;
 }
 .brand {
   display: flex;
@@ -101,138 +169,164 @@ body {
   gap: 12px;
 }
 .brand-mark {
-  color: var(--accent);
+  color: var(--primary);
   font-size: 30px;
   line-height: 1;
 }
 .brand h1 {
-  font-size: 17px;
-  margin: 0 0 2px;
-  font-weight: 600;
+  font-size: 20px;
+  margin: 0;
+  font-weight: 400;
+  line-height: 1.2;
 }
 .eyebrow {
-  font-size: 11px;
-  letter-spacing: 1.6px;
-  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--on-surface-variant);
 }
 .window-actions {
   display: flex;
   gap: 4px;
 }
+/* Icon button */
 .close {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
   padding: 0;
-  background: transparent;
   border-color: transparent;
-  color: var(--text-2);
+  color: var(--on-surface-variant);
 }
 .close:hover {
-  background: #ffffff10;
+  background: color-mix(in srgb, var(--on-surface) 8%, transparent);
 }
 .controls {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-  padding: 16px 22px 12px;
+  scrollbar-color: var(--outline-variant) transparent;
+  padding: 4px 20px 12px;
 }
 /* The weapon is the main choice, so it gets the largest control. */
 .weapon-bar {
   position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 10px;
-  margin-bottom: 14px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .weapon-button {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 64px;
+  justify-content: flex-start;
+  gap: 16px;
+  height: 68px;
   padding: 0 16px;
+  border-color: transparent;
+  border-radius: 0;
+  background: var(--container-high);
+  color: var(--on-surface);
   text-align: left;
-  background: #232323;
-  border-color: var(--line-strong);
+  font-weight: 400;
 }
-.weapon-button img {
-  height: 40px;
-  width: 104px;
-  object-fit: contain;
+.weapon-button:hover,
+.weapon-button[aria-expanded="true"] {
+  background: var(--container-highest);
 }
 /* The source icons are a mix of black and white fills; draw them all light. */
 .weapon-bar img {
-  filter: brightness(0) invert(0.88);
+  filter: brightness(0) invert(0.9);
+}
+.weapon-button img {
+  height: 44px;
+  width: 112px;
+  object-fit: contain;
 }
 .weapon-text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 .weapon-text small {
-  font-size: 11px;
-  letter-spacing: 1.6px;
-  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--primary);
 }
 .weapon-text strong {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 400;
   line-height: 1.1;
 }
-.weapon-button[aria-expanded="true"] {
-  border-color: var(--accent);
+.weapon-button > .glyph {
+  color: var(--on-surface-variant);
+  transition: transform 0.12s;
 }
 .weapon-button[aria-expanded="true"] > .glyph {
   transform: rotate(180deg);
 }
+/* Segmented button */
 .modes {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+  flex: none;
 }
-.modes .mini {
-  min-width: 118px;
+.modes button {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 0;
+  color: var(--on-surface);
+  font-size: 13px;
 }
+.modes button + button {
+  border-left: 0;
+}
+.modes button:first-child {
+  border-radius: 0;
+}
+.modes button:last-child {
+  border-radius: 0;
+}
+.modes button.active {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+/* Menu: a raised surface above the cards. */
 .weapon-menu {
   position: absolute;
   z-index: 3;
-  top: 70px;
+  top: 74px;
   left: 0;
   right: 0;
-  padding: 6px 14px 14px;
-  background: #191919;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  box-shadow: 0 14px 34px #000a;
+  padding: 4px 16px 16px;
+  background: var(--container-highest);
+  border-radius: 0;
+  box-shadow:
+    0 2px 6px #0006,
+    0 12px 32px #0009;
 }
 .weapon-menu h3 {
-  margin: 10px 0 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--muted);
+  margin: 12px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--on-surface-variant);
 }
 .weapon-group {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 .weapon-option {
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 4px;
+  height: auto;
   min-height: 40px;
-  padding: 6px 4px;
+  padding: 8px 4px;
+  border-color: var(--outline-variant);
+  border-radius: 0;
+  color: var(--on-surface);
   font-size: 13px;
+  font-weight: 400;
 }
 .weapon-option img {
   height: 26px;
@@ -240,33 +334,21 @@ body {
   object-fit: contain;
 }
 .weapon-option[aria-selected="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: transparent;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
 }
 .cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
+/* Filled card. Its banner sits one surface higher, so the category switch in
+   it outranks the switches inside the card. */
 .card {
   overflow: hidden;
-  background: #ffffff07;
-  border: 1px solid #ffffff14;
-  border-radius: 10px;
-}
-/* Switched off: everything fades except the switch that turns it back on. */
-.card.off .card-body,
-.card.off h2 > :not(.switch) {
-  opacity: 0.4;
-}
-.card.off :disabled {
-  opacity: 1;
-}
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 7px 13px 9px;
+  background: var(--container);
+  border-radius: 0;
 }
 .card.keys {
   grid-column: 1 / -1;
@@ -274,123 +356,94 @@ body {
 .card h2 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* A banner, so the category switch outranks the switches inside the card. */
+  gap: 10px;
+  height: 40px;
   margin: 0;
-  padding: 6px 13px;
-  background: #ffffff0d;
-  border-bottom: 1px solid #ffffff14;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--text);
+  padding: 0 12px 0 16px;
+  background: var(--container-high);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
 }
 .card h2 .glyph {
-  color: var(--accent);
+  color: var(--primary);
 }
 .card h2 span {
   flex: 1;
 }
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 16px 10px;
+}
+/* Switched off: everything fades except the switch that turns it back on. */
+.card.off .card-body,
+.card.off h2 > :not(.switch) {
+  opacity: 0.38;
+}
+.card.off :disabled {
+  opacity: 1;
+}
+/* Switch: an outlined track with a small handle when off, a filled track
+   with a larger handle when on. */
 .switch {
   appearance: none;
   flex: none;
-  width: 34px;
-  height: 18px;
-  margin: 0;
-  border-radius: 9px;
-  background: #4a4a4a;
-  cursor: pointer;
   position: relative;
-  transition: background 0.12s;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border: 2px solid var(--outline);
+  border-radius: 0;
+  background: var(--container-highest);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 .switch::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #e2e2e2;
-  transition: transform 0.12s;
-}
-.switch:checked {
-  background: var(--accent);
-}
-.switch:checked::after {
-  transform: translateX(16px);
-  background: var(--on-accent);
-}
-.field .switch {
-  width: 28px;
-  height: 16px;
-}
-.field .switch::after {
+  top: 50%;
+  left: 5px;
   width: 12px;
   height: 12px;
+  border-radius: 0;
+  background: var(--outline);
+  transform: translateY(-50%);
+  transition:
+    left 0.12s,
+    width 0.12s,
+    height 0.12s,
+    background 0.12s;
 }
-.field .switch:checked::after {
-  transform: translateX(12px);
+.switch:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.switch:checked::after {
+  left: 20px;
+  width: 18px;
+  height: 18px;
+  background: var(--on-primary);
+}
+.field .switch {
+  transform: scale(0.8);
+  transform-origin: right center;
 }
 .slider,
 .field {
   display: flex;
   align-items: center;
-  min-height: 27px;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-2);
+  min-height: 33px;
+  gap: 12px;
+  color: var(--on-surface);
 }
 .slider > span:first-child,
 .field > span:first-child {
-  width: 54px;
+  width: 56px;
   flex: none;
-}
-.slider input[type="range"] {
-  flex: 1;
-  min-width: 0;
-  height: 4px;
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-.number {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: none;
-}
-.number i {
-  width: 17px;
-  font-style: normal;
-  font-size: 12px;
-  color: var(--muted);
-}
-.number input,
-.field select {
-  color: var(--text);
-  background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 4px 6px;
-  font-variant-numeric: tabular-nums;
-}
-.number input {
-  width: 52px;
-  text-align: right;
-  appearance: textfield;
-}
-.number input::-webkit-inner-spin-button {
-  appearance: none;
-}
-.field select {
-  flex: 1;
-  min-width: 0;
-}
-:is(input, select):disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 /* A row whose label fills the width, with its control at the right edge. */
 .field.wide > span:first-child {
@@ -403,27 +456,94 @@ label.field {
 .field small {
   flex: 1;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--on-surface-variant);
+}
+/* Slider: the active part of the track is filled up to --p, set per input. */
+.slider input[type="range"] {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 0;
+  background: linear-gradient(
+    to right,
+    var(--primary) var(--p, 50%),
+    var(--container-highest) var(--p, 50%)
+  );
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 6px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 0;
+  background: var(--primary);
+  transition: box-shadow 0.12s;
+}
+.slider input[type="range"]:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+.number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.number i {
+  width: 18px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+/* Outlined text field and menu */
+.number input,
+.field select {
+  height: 30px;
+  color: var(--on-surface);
+  background: transparent;
+  border: 1px solid var(--outline);
+  border-radius: 0;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+:is(.number input, .field select):hover {
+  border-color: var(--on-surface);
+}
+:is(.number input, .field select):focus-visible {
+  outline: 0;
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.number input {
+  width: 54px;
+  text-align: right;
+  appearance: textfield;
+}
+.number input::-webkit-inner-spin-button {
+  appearance: none;
+}
+.field select {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.field select option {
+  background: var(--container-highest);
 }
 .row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  margin-top: 4px;
 }
 .row .mini {
   flex: 1;
-}
-.mini {
-  padding: 5px 10px;
-  font-size: 13px;
-}
-.mini.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-/* Waiting for a key press is the one state that wants attention. */
-.key.active {
-  border-color: var(--warm);
-  color: var(--warm);
+  padding: 0;
 }
 .binds {
   display: grid;
@@ -433,97 +553,100 @@ label.field {
 .bind {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--on-surface-variant);
 }
 .key {
-  min-height: 30px;
+  display: block;
+  padding: 0 8px;
+  border-radius: 0;
+  color: var(--on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Waiting for a key press is the one state that takes the tertiary colour. */
+.key.active {
+  border-color: var(--tertiary);
+  background: transparent;
+  color: var(--tertiary);
+}
 .actions {
   display: flex;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .actions button {
   flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-}
-.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  align-items: center;
 }
 kbd {
   font:
-    12px "Segoe UI",
+    500 12px "Segoe UI",
     sans-serif;
-  background: #ffffff0c;
-  border: 1px solid #ffffff17;
-  border-radius: 3px;
-  padding: 1px 5px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 0;
+  padding: 1px 6px;
 }
 .primary kbd {
-  border-color: #06263a40;
-  background: #06263a10;
+  border-color: color-mix(in srgb, var(--on-primary) 40%, transparent);
 }
 .helper {
   font-size: 12px;
   line-height: 1.9;
   text-align: center;
-  color: var(--muted);
-  margin: 10px 0 0;
+  color: var(--on-surface-variant);
+  margin: 6px 0 0;
 }
 .divider {
   margin: 0 7px;
 }
 footer {
   flex: none;
-  height: 30px;
+  height: 32px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 22px;
-  border-top: 1px solid #ffffff0d;
-  color: var(--muted);
+  gap: 8px;
+  padding: 0 20px;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant);
   font-size: 12px;
 }
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid var(--muted);
+  border-radius: 0;
+  border: 1.5px solid var(--outline);
 }
-/* Hollow while idle, filled while live: a shape, not a colour, tells them apart. */
 .status-dot.live {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--primary);
+  background: var(--primary);
 }
-.version {
+/* Text button; it turns to the tertiary colour while it waits for a second click. */
+.reset {
+  height: 24px;
   margin-left: auto;
-  color: var(--muted);
+  padding: 0 10px;
+  border-color: transparent;
+  font-size: 12px;
 }
+.reset.active {
+  border-color: var(--tertiary);
+  color: var(--tertiary);
+}
+/* Snackbar-like, in the error container colours. */
 #error {
   position: fixed;
-  bottom: 34px;
-  left: 14px;
-  right: 14px;
-  border-radius: 6px;
-  background: #4a2412;
-  border: 1px solid var(--warm);
-  color: #ffe6d6;
-  font-size: 13px;
-  padding: 10px;
+  bottom: 40px;
+  left: 16px;
+  right: 16px;
+  border-radius: 0;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  padding: 12px 16px;
   margin: 0;
   z-index: 4;
+  box-shadow: 0 6px 18px #0008;
 }
 [hidden] {
   display: none !important;
@@ -534,5 +657,8 @@ footer {
   }
   .weapon-group {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .weapon-bar {
+    flex-wrap: wrap;
   }
 }

@@ -85,6 +85,33 @@ test("sliders take typed values, clamped to their range", async ({ page }) => {
   await expect(typed).toHaveValue("400");
   await page.locator("#voiceStyle").selectOption("tones");
   await expect(page.locator("#voiceStyle")).toHaveValue("tones");
+  await page.locator("#theme").selectOption("violet");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "violet");
+  await page.screenshot({ path: "test-results/theme-violet.png" });
+  await page.locator("#theme").selectOption("ember");
+  await page.waitForTimeout(300); // let the colour transitions settle
+  await page.screenshot({ path: "test-results/theme-ember.png" });
+});
+
+test("reset defaults asks twice, then restores every setting", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator("#gap-number").fill("200");
+  await page.locator("#gap-number").blur();
+  await page.locator("#theme").selectOption("ocean");
+  const reset = page.locator("#reset");
+  await reset.click();
+  await expect(reset).toHaveText("Click again to reset");
+  await expect(page.locator("#gap")).toHaveValue("200");
+  await reset.click();
+  await expect(reset).toHaveText("Reset defaults");
+  await expect(page.locator("#gap")).toHaveValue("100");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "mint");
+  // Left alone, the first click expires.
+  await reset.click();
+  await expect(reset).toHaveText("Reset defaults", { timeout: 4000 });
+  await expect(page.locator("#gap")).toHaveValue("100");
 });
 
 test("keys can be rebound and the labels follow", async ({ page }) => {
@@ -112,11 +139,11 @@ test("controls fit the default window and stay reachable at the minimum", async 
     Math.abs(close.y + close.height / 2 - (bar.y + bar.height / 2)),
   ).toBeLessThan(1);
   for (const size of [640, 520]) {
-    await page.setViewportSize({ width: size, height: 720 });
+    await page.setViewportSize({ width: size, height: 760 });
     const sound = await page.locator("#voiceStyle").boundingBox();
     expect(sound.x + sound.width).toBeLessThan(size - 22);
   }
-  await page.setViewportSize({ width: 640, height: 720 });
+  await page.setViewportSize({ width: 640, height: 760 });
   await page.screenshot({ path: "test-results/edit-mode.png" });
   await page.locator("#weapon-button").click();
   await page.screenshot({ path: "test-results/weapon-menu.png" });

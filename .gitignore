@@ -5,3 +5,4 @@ build/bin/recoil-overlay.exe
 build/bin/recoil-overlay-dev.exe
 *.syso
 test-results/
+build/bin/recoil-overlay.exe~

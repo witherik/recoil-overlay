@@ -628,6 +628,26 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	a.emitLocked()
 	return a.snapshotLocked(), err
 }
+
+// ResetDefaults puts every setting back to its default, keys and overlay
+// position included. The settings window stays where it is.
+func (a *App) ResetDefaults() Snapshot {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.editing {
+		a.cancelLocked()
+		s := defaultSettings()
+		s.X, s.Y, s.Width, s.Height, s.Positioned = a.settings.X, a.settings.Y, a.settings.Width, a.settings.Height, a.settings.Positioned
+		a.settings = s
+		a.last = nil // the last spray may have been scored against another pattern
+		a.binding = ""
+		a.syncKeysLocked()
+		a.saveLocked()
+		a.replaceOverlayLocked()
+	}
+	a.emitLocked()
+	return a.snapshotLocked()
+}
 func (a *App) captureGeometryLocked() {
 	// A minimised window reports a parked position and size; keep the last real one.
 	if wr.WindowIsMinimised(a.ctx) {

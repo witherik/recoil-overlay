@@ -14,6 +14,7 @@ type Settings struct {
 	Gap            int    `json:"gap"`
 	ArrowSize      int    `json:"arrowSize"`
 	Opacity        int    `json:"opacity"`
+	Theme          string `json:"theme"` // colour scheme, see palettes
 	Arrows         bool   `json:"arrows"`
 	Timeline       bool   `json:"timeline"`
 	TimelineIdle   bool   `json:"timelineIdle"` // hide the timeline while left-click is held
@@ -47,7 +48,7 @@ var voiceLeads = map[string]int{"fast": defaultVoiceLeadMS, "natural": 250, "ton
 const defaultTimelineWidth = 420
 
 func defaultSettings() Settings {
-	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 720}
+	return Settings{WeaponID: "r301", ModeID: "default", Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "mint", Arrows: true, Timeline: true, TimelineOffset: 32, TimelineWidth: defaultTimelineWidth, LeftKey: 0x1E, RightKey: 0x20, StartKey: 0x42, EndKey: 0x42, PauseKey: 0x43, Voice: true, VoiceStyle: "fast", VoiceLeadMS: defaultVoiceLeadMS, Width: 640, Height: 760}
 }
 func clamp(v, low, high int) int {
 	if v < low {
@@ -64,6 +65,9 @@ func (s Settings) normalized() Settings {
 	s.Gap = clamp(s.Gap, 40, 300)
 	s.ArrowSize = clamp(s.ArrowSize, 24, 72)
 	s.Opacity = clamp(s.Opacity, 20, 100)
+	if _, known := palettes[s.Theme]; !known {
+		s.Theme = "mint"
+	}
 	s.TimelineOffset = clamp(s.TimelineOffset, 12, 400)
 	s.TimelineWidth = clamp(s.TimelineWidth, 280, 800)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)

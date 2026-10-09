@@ -6,6 +6,7 @@ export namespace main {
 	    gap: number;
 	    arrowSize: number;
 	    opacity: number;
+	    theme: string;
 	    arrows: boolean;
 	    timeline: boolean;
 	    timelineIdle: boolean;
@@ -39,6 +40,7 @@ export namespace main {
 	        this.gap = source["gap"];
 	        this.arrowSize = source["arrowSize"];
 	        this.opacity = source["opacity"];
+	        this.theme = source["theme"];
 	        this.arrows = source["arrows"];
 	        this.timeline = source["timeline"];
 	        this.timelineIdle = source["timelineIdle"];

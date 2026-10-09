@@ -13,6 +13,8 @@ export function Preview():Promise<main.Snapshot>;
 
 export function Quit():Promise<void>;
 
+export function ResetDefaults():Promise<main.Snapshot>;
+
 export function SavePosition():Promise<void>;
 
 export function StopPreview():Promise<void>;

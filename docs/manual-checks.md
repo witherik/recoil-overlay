@@ -7,6 +7,7 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 - [ ] Open Apex Legends in borderless windowed mode and launch Recoil Practice.
 - [ ] Confirm the overlay is already on screen over the crosshair, reads `EDIT MODE / F8 TO PRACTICE`, and lets clicks through to whatever is under it.
 - [ ] In edit mode, change arrow spacing, size, opacity, timeline spacing and timeline width, by slider and by typing a value. Confirm the overlay follows each change.
+- [ ] Change **Colors** and confirm the settings window and the overlay both switch scheme.
 - [ ] Open the weapon menu, pick another weapon and, where offered, another firing mode. Confirm the overlay timeline changes with it.
 - [ ] Click **Hide** and confirm the overlay disappears; **Show** brings it back. Hide it, click **Preview pattern**, and confirm it returns and plays the pattern.
 - [ ] Click **Move overlay**, drag the overlay by its backdrop, and click **Done moving**. Confirm it stays where you left it, without the backdrop, and is still there in practice mode. Click **Center** and confirm it returns to the crosshair.
@@ -22,7 +23,7 @@ Use this checklist on a Windows amd64 desktop with the native app and Apex Legen
 
 ## Strafe reading and score
 
-- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills light blue for right and orange for left as the playhead moves, and stays grey while neither or both keys are held.
+- [ ] Hold left-click in Apex and strafe with A and D. Confirm the lower bar fills in the scheme's two colours (mint for right and coral for left by default) as the playhead moves, and stays grey while neither or both keys are held.
 - [ ] Release. Confirm the spray stays on the timeline with a signed deviation under each switch and the total deviation in the header, until the next click.
 - [ ] Rebind a strafe key in edit mode, then confirm the new key is read and the old one is ignored. Press Escape while rebinding and confirm nothing changes.
 - [ ] Rebind **Start practice** to another key. Confirm it enters practice but does not leave it, and that the old key still ends practice. Hold the new key down and confirm it does not flip modes repeatedly.

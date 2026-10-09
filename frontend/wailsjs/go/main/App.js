@@ -22,6 +22,10 @@ export function Quit() {
   return window['go']['main']['App']['Quit']();
 }
 
+export function ResetDefaults() {
+  return window['go']['main']['App']['ResetDefaults']();
+}
+
 export function SavePosition() {
   return window['go']['main']['App']['SavePosition']();
 }

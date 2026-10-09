@@ -174,21 +174,37 @@ func deviationLabel(change pattern.Change, compact bool) string {
 	return fmt.Sprintf("%+d ms", change.DeviationMS)
 }
 
-// Within 40 ms reads as on time, within 100 ms as close. Like every colour on
-// the overlay, these stay apart under each form of colour blindness; the label
-// itself carries the value.
-func deviationColor(change pattern.Change) color.NRGBA {
+// Within 40 ms reads as on time, within 100 ms as close.
+func deviationColor(change pattern.Change, good color.NRGBA) color.NRGBA {
 	off := change.DeviationMS
 	if off < 0 {
 		off = -off
 	}
 	switch {
 	case change.Missed || off > 100:
-		return color.NRGBA{255, 158, 205, 255}
+		return color.NRGBA{255, 180, 171, 255}
 	case off > 40:
-		return color.NRGBA{255, 221, 87, 255}
+		return color.NRGBA{255, 213, 110, 255}
 	}
-	return color.NRGBA{147, 212, 255, 255}
+	return good
+}
+
+// A palette is the overlay's side of a colour scheme: one colour for each
+// strafe direction. The settings window's side is in frontend/src/style.css.
+type palette struct{ right, left color.NRGBA }
+
+var palettes = map[string]palette{
+	"mint":   {color.NRGBA{112, 227, 192, 255}, color.NRGBA{244, 161, 140, 255}},
+	"violet": {color.NRGBA{208, 188, 255, 255}, color.NRGBA{246, 193, 119, 255}},
+	"ember":  {color.NRGBA{255, 138, 112, 255}, color.NRGBA{127, 215, 232, 255}},
+	"ocean":  {color.NRGBA{147, 212, 255, 255}, color.NRGBA{232, 101, 10, 255}},
+}
+
+// shade is the dark fill behind a segment of the expected bar: its direction's
+// colour, mostly mixed into the timeline box.
+func shade(c color.NRGBA) color.NRGBA {
+	mix := func(v uint8) uint8 { return uint8((int(v)*30 + 16*70) / 100) }
+	return color.NRGBA{mix(c.R), mix(c.G), mix(c.B), 255}
 }
 
 type canvas struct {
@@ -261,11 +277,11 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	c := canvas{img, scale}
 	center := float64(width) / scale / 2
-	// Right is a light blue and left a darker orange: the pair differs in hue
-	// for red-green and blue-yellow colour blindness, and in brightness for
-	// those who see no colour at all.
-	sky := color.NRGBA{147, 212, 255, 255}
-	orange := color.NRGBA{232, 101, 10, 255}
+	scheme, known := palettes[s.Settings.Theme]
+	if !known {
+		scheme = palettes["mint"]
+	}
+	right, left := scheme.right, scheme.left
 	muted := color.NRGBA{184, 184, 184, 255}
 	text := color.NRGBA{237, 237, 237, 255}
 	dim := color.NRGBA{178, 178, 178, 255}
@@ -274,7 +290,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	if s.Moving {
 		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
 		w, h := float64(width)/scale, float64(height)/scale
-		c.rect(0, 0, w, h, sky)
+		c.rect(0, 0, w, h, right)
 		c.rect(1, 1, w-2, h-2, color.NRGBA{16, 16, 16, 150})
 		c.line(center-9, arrowAnchorY, center+9, arrowAnchorY, 1.5, text)
 		c.line(center, arrowAnchorY-9, center, arrowAnchorY+9, 1.5, text)
@@ -290,9 +306,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		col := muted
 		if s.Armed && s.Direction == direction {
 			if direction == "right" {
-				col = sky
+				col = right
 			} else {
-				col = orange
+				col = left
 			}
 		}
 		px := func(v float64) float64 { return x - size/2 + v*size/64 }
@@ -362,9 +378,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			letter, fill, accent := "-", color.NRGBA{56, 56, 56, 255}, color.NRGBA{142, 142, 142, 255}
 			switch phase.Direction {
 			case "right":
-				letter, fill, accent = "R", color.NRGBA{24, 60, 94, 255}, sky
+				letter, fill, accent = "R", shade(right), right
 			case "left":
-				letter, fill, accent = "L", color.NRGBA{98, 43, 6, 255}, orange
+				letter, fill, accent = "L", shade(left), left
 			}
 			c.rect(from, y+30, to-from, 24, fill)
 			c.rect(from, y+30, to-from, 2, accent)
@@ -380,10 +396,10 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		// The player's own strafes, on the same time axis; grey is neutral.
 		c.rect(x+12, y+58, track, 24, color.NRGBA{44, 44, 44, 255})
 		for _, segment := range s.Player {
-			fill := sky
+			fill := right
 			switch segment.Direction {
 			case "left":
-				fill = orange
+				fill = left
 			case "right":
 			default:
 				continue
@@ -406,7 +422,7 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			if review {
 				for _, change := range s.Score.Switches {
 					if change.AtMS == int64(startMS) {
-						label, col = deviationLabel(change, compact), deviationColor(change)
+						label, col = deviationLabel(change, compact), deviationColor(change, right)
 					}
 				}
 			}
