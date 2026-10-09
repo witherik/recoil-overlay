@@ -174,7 +174,9 @@ func deviationLabel(change pattern.Change, compact bool) string {
 	return fmt.Sprintf("%+d ms", change.DeviationMS)
 }
 
-// Within 40 ms reads as on time, within 100 ms as close.
+// Within 40 ms reads as on time, within 100 ms as close. Like every colour on
+// the overlay, these stay apart under each form of colour blindness; the label
+// itself carries the value.
 func deviationColor(change pattern.Change) color.NRGBA {
 	off := change.DeviationMS
 	if off < 0 {
@@ -182,11 +184,11 @@ func deviationColor(change pattern.Change) color.NRGBA {
 	}
 	switch {
 	case change.Missed || off > 100:
-		return color.NRGBA{244, 161, 140, 255}
+		return color.NRGBA{255, 158, 205, 255}
 	case off > 40:
-		return color.NRGBA{240, 200, 110, 255}
+		return color.NRGBA{255, 221, 87, 255}
 	}
-	return color.NRGBA{112, 227, 192, 255}
+	return color.NRGBA{147, 212, 255, 255}
 }
 
 type canvas struct {
@@ -259,18 +261,21 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	c := canvas{img, scale}
 	center := float64(width) / scale / 2
-	mint := color.NRGBA{112, 227, 192, 255}
-	coral := color.NRGBA{244, 161, 140, 255}
-	muted := color.NRGBA{150, 168, 172, 255}
-	text := color.NRGBA{220, 232, 233, 255}
-	dim := color.NRGBA{139, 161, 164, 255}
+	// Right is a light blue and left a darker orange: the pair differs in hue
+	// for red-green and blue-yellow colour blindness, and in brightness for
+	// those who see no colour at all.
+	sky := color.NRGBA{147, 212, 255, 255}
+	orange := color.NRGBA{232, 101, 10, 255}
+	muted := color.NRGBA{184, 184, 184, 255}
+	text := color.NRGBA{237, 237, 237, 255}
+	dim := color.NRGBA{178, 178, 178, 255}
 	size := float64(s.Settings.ArrowSize)
 	gap := float64(s.Settings.Gap)
 	if s.Moving {
 		// A backdrop makes the whole rectangle grabbable, not just the drawn pixels.
 		w, h := float64(width)/scale, float64(height)/scale
-		c.rect(0, 0, w, h, mint)
-		c.rect(1, 1, w-2, h-2, color.NRGBA{10, 17, 27, 150})
+		c.rect(0, 0, w, h, sky)
+		c.rect(1, 1, w-2, h-2, color.NRGBA{16, 16, 16, 150})
 		c.line(center-9, arrowAnchorY, center+9, arrowAnchorY, 1.5, text)
 		c.line(center, arrowAnchorY-9, center, arrowAnchorY+9, 1.5, text)
 	}
@@ -285,9 +290,9 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		col := muted
 		if s.Armed && s.Direction == direction {
 			if direction == "right" {
-				col = mint
+				col = sky
 			} else {
-				col = coral
+				col = orange
 			}
 		}
 		px := func(v float64) float64 { return x - size/2 + v*size/64 }
@@ -314,14 +319,14 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 		box := image.Rect(int((x-size)*scale), int((arrowAnchorY-size)*scale), int((x+size)*scale), int((arrowAnchorY+size)*scale))
 		draw.DrawMask(img, box, layer.image, box.Min, image.NewUniform(color.Alpha{inactiveArrowAlpha}), image.Point{}, draw.Over)
 	}
-	c.centeredText(center, 61, 11, practiceStatus(s), color.NRGBA{183, 196, 200, 210})
+	c.centeredText(center, 61, 11, practiceStatus(s), color.NRGBA{222, 222, 222, 230})
 	// Optionally clear the view while shooting; the timeline returns on release.
 	firing := s.Settings.TimelineIdle && s.Held && !s.Editing
 	if s.Settings.Timeline && !firing {
 		w := math.Min(float64(s.Settings.TimelineWidth), float64(width)/scale-44)
 		x := center - w/2
 		y := arrowAnchorY + size/2 + float64(s.Settings.TimelineOffset)
-		box := color.NRGBA{10, 17, 27, 215}
+		box := color.NRGBA{16, 16, 16, 228}
 		c.rect(x, y, w, timelineHeight, box)
 		total := math.Max(1, float64(s.TotalMS))
 		c.text(x+12, y+19, 12, s.Weapon, text)
@@ -354,12 +359,12 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 				to -= cut / 2
 			}
 			// Neutral phases (fire without strafing) are grey.
-			letter, fill, accent := "-", color.NRGBA{44, 54, 60, 255}, color.NRGBA{110, 125, 130, 255}
+			letter, fill, accent := "-", color.NRGBA{56, 56, 56, 255}, color.NRGBA{142, 142, 142, 255}
 			switch phase.Direction {
 			case "right":
-				letter, fill, accent = "R", color.NRGBA{32, 63, 56, 255}, mint
+				letter, fill, accent = "R", color.NRGBA{24, 60, 94, 255}, sky
 			case "left":
-				letter, fill, accent = "L", color.NRGBA{72, 49, 45, 255}, coral
+				letter, fill, accent = "L", color.NRGBA{98, 43, 6, 255}, orange
 			}
 			c.rect(from, y+30, to-from, 24, fill)
 			c.rect(from, y+30, to-from, 2, accent)
@@ -373,12 +378,12 @@ func drawPractice(s Snapshot, width, height int, scale float64) *image.RGBA {
 			startMS += duration
 		}
 		// The player's own strafes, on the same time axis; grey is neutral.
-		c.rect(x+12, y+58, track, 24, color.NRGBA{38, 48, 54, 255})
+		c.rect(x+12, y+58, track, 24, color.NRGBA{44, 44, 44, 255})
 		for _, segment := range s.Player {
-			fill := mint
+			fill := sky
 			switch segment.Direction {
 			case "left":
-				fill = coral
+				fill = orange
 			case "right":
 			default:
 				continue

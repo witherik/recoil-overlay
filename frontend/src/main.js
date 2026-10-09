@@ -1,5 +1,5 @@
 import "./style.css";
-import { api, native, onState } from "./bridge";
+import { api, minimise, native, onState } from "./bridge";
 // Weapon icons are optional: a weapon without a file shows its name alone.
 const icons = Object.fromEntries(
   Object.entries(
@@ -16,6 +16,7 @@ const glyphs = {
   overlay: "M3 5h18v12H3zM12 8v6M9 11h6M8 21h8",
   voice: "M4 10v4h3l5 4V6l-5 4zM16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10",
   keys: "M3 7h18v10H3zM7 10.5h.01M11 10.5h.01M15 10.5h.01M8 13.5h8",
+  minimise: "M6 12h12",
   close: "M6 6l12 12M18 6 6 18",
   chevron: "m6 9 6 6 6-6",
 };
@@ -34,7 +35,7 @@ const slider = (id) => {
   return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
 };
 const card = (name, title, toggle, body) =>
-  `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2>${body}</section>`;
+  `<section class="card ${name}"><h2>${icon(name)}<span>${title}</span>${toggle ? `<input id="${toggle}" type="checkbox" class="switch" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
 const bindings = {
   left: "Strafe left",
   right: "Strafe right",
@@ -43,7 +44,7 @@ const bindings = {
   pause: "Disable / enable",
 };
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><button id="quit" class="close" title="Close application" aria-label="Close application">${icon("close")}</button></header>
+ <header class="toolbar"><div class="brand"><span class="brand-mark">↔</span><div><h1>Recoil Practice</h1><span class="eyebrow">STRAFE TRAINER / 01</span></div></div><div class="window-actions"><button id="minimise" class="close" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="close" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
  <main class="controls">
   <section class="weapon-bar">
    <button id="weapon-button" class="weapon-button" aria-haspopup="listbox" aria-expanded="false"><img id="weapon-icon" alt="" hidden><span class="weapon-text"><small>WEAPON</small><strong id="weapon-label"></strong></span>${icon("chevron")}</button>
@@ -52,9 +53,9 @@ document.querySelector("#app").innerHTML = `
   </section>
   <div class="cards">
    ${card("arrows", "Arrows", "arrows-toggle", slider("gap") + slider("arrowSize"))}
-   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="check" title="Hide the timeline in practice while left-click is held"><input id="timelineIdle-toggle" type="checkbox">Hide while shooting</label>`)}
+   ${card("timeline", "Timeline", "timeline-toggle", slider("timelineOffset") + slider("timelineWidth") + `<label class="field wide" title="Hide the timeline in practice while left-click is held"><span>Hide while shooting</span><input id="timelineIdle-toggle" type="checkbox" class="switch"></label>`)}
    ${card("overlay", "Overlay", "", slider("opacity") + `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay" class="mini"></button><button id="move" class="mini" title="Drag the overlay into place">Move</button><button id="centerOverlay" class="mini" title="Put the overlay back on the crosshair">Center</button></div>`)}
-   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="check" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><input id="voiceStart-toggle" type="checkbox">Opening cue</label>`)}
+   ${card("voice", "Voice", "voice-toggle", `<div class="field"><span>Sound</span><select id="voiceStyle" aria-label="Voice sound"><option value="fast">Fast voice</option><option value="natural">Natural voice</option><option value="tones">Tones</option></select></div><div class="field" title="How long before each change of direction its cue starts"><span>Lead</span><small>before each switch</small><span class="number"><input id="voiceLeadMs" type="number" min="0" max="350" step="10" aria-label="Voice lead"><i>ms</i></span></div><label class="field wide" title="Also announce the first strafe of a spray. It cannot be announced ahead of time, since the click is not predictable."><span>Opening cue</span><input id="voiceStart-toggle" type="checkbox" class="switch"></label>`)}
    ${card(
      "keys",
      "Keys",
@@ -175,16 +176,18 @@ function render(s) {
   $("voiceStyle").value = config.voiceStyle;
   $("voiceStart-toggle").checked = config.voiceStart;
   $("timelineIdle-toggle").checked = config.timelineIdle;
-  // A switched-off category keeps its settings but greys them out.
+  // A switched-off category keeps its settings but fades the whole card.
   for (const [name, on] of [
     ["arrows", config.arrows],
     ["timeline", config.timeline],
     ["voice", config.voice],
-  ])
+  ]) {
+    document.querySelector(`.card.${name}`).classList.toggle("off", !on);
     for (const control of document.querySelectorAll(
-      `.card.${name} :is(input, select):not(.switch)`,
+      `.card.${name} > :not(h2) :is(input, select)`,
     ))
       control.disabled = !on;
+  }
   $("version").textContent = `${s.weapon} · v0.1`;
   syncWeapon(config);
   for (const id in bindings) {
@@ -320,6 +323,7 @@ for (const id in bindings)
     e.target.blur(); // so Space or Enter can be bound without re-clicking
     api.BindKey(id).then(render).catch(error);
   };
+$("minimise").onclick = minimise;
 $("quit").onclick = () => api.Quit().catch(error);
 document.addEventListener("keydown", (e) => {
   if (e.code !== "Escape") return;

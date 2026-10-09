@@ -7,13 +7,22 @@
 }
 :root {
   font-family: "Segoe UI", Nunito, sans-serif;
-  color: #dce8e9;
+  color: var(--text);
   font-size: 14px;
-  --mint: #70e3c0;
-  --coral: #f4a18c;
-  --muted: #8fa3a6;
-  --line: #3a4c50;
-  --field: #0c171c;
+  /* Neutral grey surfaces, lighter as they rise, carry most of the window.
+     One cool accent (the overlay's "right" blue) marks what is active, and its
+     complement, a warm orange, is kept for what needs attention. Text meets
+     WCAG AA on every surface, and state is never shown by hue alone. */
+  --text: #ededed;
+  --text-2: #bfbfbf;
+  --muted: #9c9c9c;
+  --surface: #2b2b2b;
+  --line: #404040;
+  --line-strong: #5e5e5e;
+  --field: #0d0d0d;
+  --accent: #93d4ff;
+  --on-accent: #06243a;
+  --warm: #ffa55c;
 }
 * {
   box-sizing: border-box;
@@ -36,8 +45,8 @@ select {
 button {
   cursor: pointer;
   border: 1px solid var(--line);
-  color: #dce8e9;
-  background: #243238;
+  color: var(--text);
+  background: var(--surface);
   border-radius: 7px;
   padding: 10px 14px;
 }
@@ -49,7 +58,7 @@ button:disabled {
   cursor: not-allowed;
 }
 :is(button, input, select):focus-visible {
-  outline: 2px solid var(--mint);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 body {
@@ -62,8 +71,8 @@ body {
   border-radius: 14px;
   background: linear-gradient(
     135deg,
-    rgba(23, 34, 38, 0.98),
-    rgba(12, 21, 25, 0.98)
+    rgba(29, 29, 29, 0.98),
+    rgba(15, 15, 15, 0.98)
   );
 }
 .glyph {
@@ -92,7 +101,7 @@ body {
   gap: 12px;
 }
 .brand-mark {
-  color: var(--mint);
+  color: var(--accent);
   font-size: 30px;
   line-height: 1;
 }
@@ -106,6 +115,10 @@ body {
   letter-spacing: 1.6px;
   color: var(--muted);
 }
+.window-actions {
+  display: flex;
+  gap: 4px;
+}
 .close {
   display: grid;
   place-items: center;
@@ -114,7 +127,7 @@ body {
   padding: 0;
   background: transparent;
   border-color: transparent;
-  color: #9aacae;
+  color: var(--text-2);
 }
 .close:hover {
   background: #ffffff10;
@@ -124,7 +137,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #40585b transparent;
+  scrollbar-color: var(--line-strong) transparent;
   padding: 16px 22px 12px;
 }
 /* The weapon is the main choice, so it gets the largest control. */
@@ -143,8 +156,8 @@ body {
   height: 64px;
   padding: 0 16px;
   text-align: left;
-  background: #1b2a30;
-  border-color: #4d666b;
+  background: #232323;
+  border-color: var(--line-strong);
 }
 .weapon-button img {
   height: 40px;
@@ -154,9 +167,6 @@ body {
 /* The source icons are a mix of black and white fills; draw them all light. */
 .weapon-bar img {
   filter: brightness(0) invert(0.88);
-}
-.weapon-option[aria-selected="true"] img {
-  filter: brightness(0) invert(0.88) sepia(1) hue-rotate(110deg) saturate(3);
 }
 .weapon-text {
   flex: 1;
@@ -175,7 +185,7 @@ body {
   line-height: 1.1;
 }
 .weapon-button[aria-expanded="true"] {
-  border-color: var(--mint);
+  border-color: var(--accent);
 }
 .weapon-button[aria-expanded="true"] > .glyph {
   transform: rotate(180deg);
@@ -196,8 +206,8 @@ body {
   left: 0;
   right: 0;
   padding: 6px 14px 14px;
-  background: #121f24;
-  border: 1px solid #4d666b;
+  background: #191919;
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: 0 14px 34px #000a;
 }
@@ -230,8 +240,8 @@ body {
   object-fit: contain;
 }
 .weapon-option[aria-selected="true"] {
-  border-color: var(--mint);
-  color: var(--mint);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .cards {
   display: grid;
@@ -239,13 +249,24 @@ body {
   gap: 10px;
 }
 .card {
+  overflow: hidden;
+  background: #ffffff07;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+}
+/* Switched off: everything fades except the switch that turns it back on. */
+.card.off .card-body,
+.card.off h2 > :not(.switch) {
+  opacity: 0.4;
+}
+.card.off :disabled {
+  opacity: 1;
+}
+.card-body {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding: 11px 13px 13px;
-  background: #ffffff06;
-  border: 1px solid #ffffff12;
-  border-radius: 10px;
+  gap: 6px;
+  padding: 7px 13px 9px;
 }
 .card.keys {
   grid-column: 1 / -1;
@@ -254,26 +275,31 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 1px;
+  /* A banner, so the category switch outranks the switches inside the card. */
+  margin: 0;
+  padding: 6px 13px;
+  background: #ffffff0d;
+  border-bottom: 1px solid #ffffff14;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: #b9cbce;
+  color: var(--text);
 }
 .card h2 .glyph {
-  color: var(--mint);
+  color: var(--accent);
 }
 .card h2 span {
   flex: 1;
 }
 .switch {
   appearance: none;
+  flex: none;
   width: 34px;
   height: 18px;
   margin: 0;
   border-radius: 9px;
-  background: #33454a;
+  background: #4a4a4a;
   cursor: pointer;
   position: relative;
   transition: background 0.12s;
@@ -286,23 +312,35 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #c9d6d8;
+  background: #e2e2e2;
   transition: transform 0.12s;
 }
 .switch:checked {
-  background: var(--mint);
+  background: var(--accent);
 }
 .switch:checked::after {
   transform: translateX(16px);
-  background: #092b22;
+  background: var(--on-accent);
+}
+.field .switch {
+  width: 28px;
+  height: 16px;
+}
+.field .switch::after {
+  width: 12px;
+  height: 12px;
+}
+.field .switch:checked::after {
+  transform: translateX(12px);
 }
 .slider,
 .field {
   display: flex;
   align-items: center;
+  min-height: 27px;
   gap: 10px;
   font-size: 13px;
-  color: #b8cbce;
+  color: var(--text-2);
 }
 .slider > span:first-child,
 .field > span:first-child {
@@ -314,7 +352,7 @@ body {
   min-width: 0;
   height: 4px;
   margin: 0;
-  accent-color: var(--mint);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 .number {
@@ -331,7 +369,7 @@ body {
 }
 .number input,
 .field select {
-  color: #dce8e9;
+  color: var(--text);
   background: var(--field);
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -354,18 +392,18 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #b8cbce;
+/* A row whose label fills the width, with its control at the right edge. */
+.field.wide > span:first-child {
+  width: auto;
+  flex: 1;
 }
-.check input {
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  accent-color: var(--mint);
+label.field {
+  cursor: pointer;
+}
+.field small {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
 }
 .row {
   display: flex;
@@ -379,8 +417,13 @@ body {
   font-size: 13px;
 }
 .mini.active {
-  border-color: var(--mint);
-  color: var(--mint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Waiting for a key press is the one state that wants attention. */
+.key.active {
+  border-color: var(--warm);
+  color: var(--warm);
 }
 .binds {
   display: grid;
@@ -392,7 +435,7 @@ body {
   flex-direction: column;
   gap: 5px;
   font-size: 12px;
-  color: #b8cbce;
+  color: var(--text-2);
 }
 .key {
   min-height: 30px;
@@ -411,9 +454,9 @@ body {
   font-weight: 600;
 }
 .primary {
-  background: var(--mint);
-  border-color: var(--mint);
-  color: #092b22;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   display: flex;
   justify-content: center;
   gap: 14px;
@@ -429,8 +472,8 @@ kbd {
   padding: 1px 5px;
 }
 .primary kbd {
-  border-color: #0c4c3940;
-  background: #0c4c3910;
+  border-color: #06263a40;
+  background: #06263a10;
 }
 .helper {
   font-size: 12px;
@@ -454,17 +497,19 @@ footer {
   font-size: 12px;
 }
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #c9a16a;
+  border: 1.5px solid var(--muted);
 }
+/* Hollow while idle, filled while live: a shape, not a colour, tells them apart. */
 .status-dot.live {
-  background: var(--mint);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 .version {
   margin-left: auto;
-  color: #64797d;
+  color: var(--muted);
 }
 #error {
   position: fixed;
@@ -472,8 +517,9 @@ footer {
   left: 14px;
   right: 14px;
   border-radius: 6px;
-  background: #542a2a;
-  color: #ffd4ca;
+  background: #4a2412;
+  border: 1px solid var(--warm);
+  color: #ffe6d6;
   font-size: 13px;
   padding: 10px;
   margin: 0;

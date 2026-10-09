@@ -45,7 +45,7 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
 - **Move overlay** gives the overlay a backdrop so you can drag it into place; **Done moving** makes it click-through again. The position is saved as an offset from the middle of the Apex window (or of the current monitor when Apex is not running), so it follows resolution changes. The first run starts centered, and **Center** resets it. Use this to correct the placement on mixed-DPI setups.
 - **Timeline** has its own switch, a spacing below the arrows (up to 400 px) and a width (280 to 800 px). **Hide while shooting** keeps it visible between sprays but removes it from the overlay while left-click is held.
 - Every slider has a number field beside it: type a value and press Enter or Tab. Values outside the range are clamped.
-- **Your strafes** are drawn in a second bar under the expected one, on the same time axis: mint while you strafe right, coral for left, grey for neutral (no key, or both held). The strafe keys read are A and D by default.
+- **Your strafes** are drawn in a second bar under the expected one, on the same time axis: light blue while you strafe right, orange for left, grey for neutral (no key, or both held). The strafe keys read are A and D by default.
 - **Score:** when a spray ends, it stays on the timeline until the next one. Each expected switch shows how early (−) or late (+) you made it, or MISS, and the header shows the total: the sum of those deviations, counting early and late alike. Sprays shorter than 250 ms are ignored, and a switch is only judged if you kept firing long enough to make it.
 - **Opening cue** (off by default) also speaks the first strafe of a spray. It cannot be announced ahead of time, because the click is not predictable; with it off, the voice starts at the first change of direction. For weapons that begin with a wait, the strafe after the wait counts as the opening one.
 - **F9** disables or enables practice input. Re-enabling requires a fresh click (release, then press).
@@ -57,7 +57,7 @@ The native Windows input listener uses Raw Input for left mouse button down/up e
   - **Tones**: a 60 ms beep, low for left and an octave higher for right.
 - **Lead** is how long before a direction change its cue starts, from 0 to 350 ms. It defaults to the length of the chosen sound (75, 250 or 60 ms), so the cue finishes just as the change arrives; a lead you have set yourself is kept when you switch sound.
 
-The settings window groups everything into Arrows, Timeline, Overlay, Voice and Keys. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control.
+The settings window groups everything into Arrows, Timeline, Overlay, Voice and Keys. Settings are stored at `%APPDATA%\RecoilPractice\settings.json`. The settings window position is saved when entering practice mode and when exiting through the app's close control. The **–** button in the title bar minimises the settings window to the taskbar. In edit mode the overlay preview goes with it and returns when you restore the window. Practice mode is unaffected, and leaving practice always brings the settings window back, even if it was minimised.
 
 ## Build requirements
 

@@ -458,6 +458,23 @@ func setOverlayMode(mode int, s Settings) error {
 	}
 	return nil
 }
+
+// mainMinimised reports whether the settings window is in the taskbar.
+func mainMinimised() bool {
+	if mainWindow == 0 {
+		return false
+	}
+	minimised, _, _ := user32.NewProc("IsIconic").Call(mainWindow)
+	return minimised != 0
+}
+
+// restoreMainWindow brings the settings window back from the taskbar. Async:
+// its UI thread may be waiting on our lock.
+func restoreMainWindow() {
+	if mainMinimised() {
+		user32.NewProc("ShowWindowAsync").Call(mainWindow, 9) // SW_RESTORE
+	}
+}
 func restorePosition(ctx context.Context, x, y int) {
 	metric := user32.NewProc("GetSystemMetrics")
 	left, _, _ := metric.Call(76)

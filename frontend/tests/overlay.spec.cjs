@@ -79,6 +79,9 @@ test("sliders take typed values, clamped to their range", async ({ page }) => {
   // Switching a category off greys out its settings without losing them.
   await page.locator("#timeline-toggle").uncheck();
   await expect(typed).toBeDisabled();
+  await expect(page.locator(".card.timeline")).toHaveClass(/off/);
+  await expect(page.locator(".card.arrows")).not.toHaveClass(/off/);
+  await page.screenshot({ path: "test-results/category-off.png" });
   await expect(typed).toHaveValue("400");
   await page.locator("#voiceStyle").selectOption("tones");
   await expect(page.locator("#voiceStyle")).toHaveValue("tones");
@@ -102,6 +105,7 @@ test("controls fit the default window and stay reachable at the minimum", async 
   expect(
     await controls.evaluate((el) => el.scrollHeight <= el.clientHeight),
   ).toBe(true);
+  await expect(page.locator("#minimise")).toBeVisible();
   const close = await page.locator("#quit").boundingBox();
   const bar = await page.locator(".toolbar").boundingBox();
   expect(

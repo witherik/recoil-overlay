@@ -1,4 +1,4 @@
-import { EventsOn } from "../wailsjs/runtime/runtime";
+import { EventsOn, WindowMinimise } from "../wailsjs/runtime/runtime";
 import leftURL from "../../assets/voice/left.wav?url";
 import rightURL from "../../assets/voice/right.wav?url";
 export const native = Boolean(window.go?.main?.App);
@@ -160,6 +160,8 @@ const browserAPI = {
   SavePosition: async () => {},
   Quit: async () => {},
 };
+// Minimising keeps the app in the taskbar and hides the overlay preview.
+export const minimise = () => native && WindowMinimise();
 export const api = native ? window.go.main.App : browserAPI;
 export function onState(fn) {
   if (native) return EventsOn("state", fn);

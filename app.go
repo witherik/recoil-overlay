@@ -65,6 +65,7 @@ type App struct {
 	editing, armed, focused, inputReady, running, preview, held bool
 	moving                                                      bool
 	shown                                                       bool // show the overlay while editing too
+	minimised                                                   bool // the settings window is in the taskbar
 	leftDown, rightDown                                         bool
 	binding                                                     string // the action waiting for a key, see keySlotsLocked
 	hotDown                                                     map[int]bool
@@ -152,6 +153,7 @@ func (a *App) loop() {
 		case now := <-tick.C:
 			a.mu.Lock()
 			a.advanceLocked(now, apexForeground())
+			a.minimiseLocked(mainMinimised())
 			a.emitLocked()
 			a.mu.Unlock()
 		}
@@ -430,12 +432,33 @@ func (a *App) overlayModeLocked() int {
 	switch {
 	case !a.editing:
 		return overlayPractice
+	case a.minimised:
+		return overlayHidden
 	case a.moving:
 		return overlayMove
 	case a.shown:
 		return overlayPreview
 	}
 	return overlayHidden
+}
+
+// minimiseLocked follows the settings window into and out of the taskbar. While
+// editing, the overlay is only a preview, so it goes away with the window.
+func (a *App) minimiseLocked(minimised bool) {
+	if minimised == a.minimised {
+		return
+	}
+	a.minimised = minimised
+	if !a.editing {
+		return
+	}
+	if minimised {
+		a.moving = false
+		a.cancelLocked()
+	}
+	if err := a.applyOverlayLocked(); err != nil {
+		a.err = err.Error()
+	}
 }
 func (a *App) applyOverlayLocked() error {
 	return setOverlayMode(a.overlayModeLocked(), a.settings)
@@ -468,11 +491,16 @@ func (a *App) toggleLocked() {
 	}
 	a.binding = ""
 	a.syncKeysLocked()
-	moving := a.moving
+	moving, minimised := a.moving, a.minimised
 	a.editing, a.moving = !a.editing, false
+	if a.editing {
+		// Leaving practice always brings the editor back, even from the taskbar.
+		restoreMainWindow()
+		a.minimised = false
+	}
 	if err := a.applyOverlayLocked(); err != nil {
 		a.err = err.Error()
-		a.editing, a.moving = !a.editing, moving
+		a.editing, a.moving, a.minimised = !a.editing, moving, minimised
 		return
 	}
 	a.cancelLocked()
@@ -601,6 +629,10 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	return a.snapshotLocked(), err
 }
 func (a *App) captureGeometryLocked() {
+	// A minimised window reports a parked position and size; keep the last real one.
+	if wr.WindowIsMinimised(a.ctx) {
+		return
+	}
 	a.settings.X, a.settings.Y = wr.WindowGetPosition(a.ctx)
 	a.settings.Width, a.settings.Height = wr.WindowGetSize(a.ctx)
 	a.settings.Positioned = true

@@ -318,3 +318,21 @@ func TestVoiceStyleMovesDefaultLead(t *testing.T) {
 		t.Fatal(*spoken)
 	}
 }
+
+func TestMinimisingHidesOnlyThePreview(t *testing.T) {
+	a, _ := testApp()
+	a.editing, a.shown, a.moving = true, true, true
+	a.minimiseLocked(true)
+	if a.overlayModeLocked() != overlayHidden || a.moving {
+		t.Fatal("a minimised editor should take its preview along")
+	}
+	a.editing = false
+	if a.overlayModeLocked() != overlayPractice {
+		t.Fatal("practice must keep the overlay")
+	}
+	a.editing = true
+	a.minimiseLocked(false)
+	if a.overlayModeLocked() != overlayPreview {
+		t.Fatal("restoring the editor should bring the preview back")
+	}
+}
