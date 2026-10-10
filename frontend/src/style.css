@@ -234,6 +234,7 @@ button.confirm:hover {
 }
 .icon {
   width: 32px;
+  height: 32px;
   padding: 0;
   background: none;
   color: var(--dim);
