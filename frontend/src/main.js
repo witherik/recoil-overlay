@@ -114,7 +114,7 @@ const cards = [
   ),
 ];
 document.querySelector("#app").innerHTML = `
- <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.2</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
+ <header class="toolbar"><div class="brand"><span class="left">←</span><span class="right">→</span><h1>Recoil Practice</h1><span class="version">v0.3</span></div><div class="window-actions"><button id="minimise" class="icon" title="Minimise to the taskbar" aria-label="Minimise">${icon("minimise")}</button><button id="quit" class="icon" title="Close application" aria-label="Close application">${icon("close")}</button></div></header>
  <main class="controls">
   <section class="weapon-bar">
    <button id="weapon-button" class="weapon-button" aria-haspopup="listbox" aria-expanded="false"><img id="weapon-icon" alt="" hidden><span class="weapon-text"><small>WEAPON</small><strong id="weapon-label"></strong></span>${icon("chevron")}</button>
