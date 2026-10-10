@@ -22,11 +22,11 @@ const sliders = {
   gap: ["Spacing", 40, 300, 2, "px"],
   arrowSize: ["Size", 24, 72, 2, "px"],
   // Negative puts the timeline above the arrows.
-  timelineOffset: ["Spacing", -800, 800, 2, "px"],
+  timelineOffset: ["Offset", -800, 800, 2, "px"],
   timelineWidth: ["Width", 280, 800, 4, "px"],
   opacity: ["Opacity", 20, 100, 1, "%"],
 };
-// Checkboxes, with the id `${key}-toggle`. The first three switch a whole card.
+// Switches, with the id `${key}-toggle`. The first three switch a whole card.
 const cardToggles = ["arrows", "timeline", "voice"];
 const toggles = [...cardToggles, "timelineIdle", "voiceStart"];
 const selects = ["theme", "voiceStyle"];
@@ -52,13 +52,13 @@ const slider = (id) => {
   return `<div class="slider"><span>${label}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="number"><input id="${id}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="${label} value"><i>${unit}</i></span></div>`;
 };
 const select = (id, label, description, options) =>
-  `<div class="field"><span>${label}</span><select id="${id}" aria-label="${description}">${options
+  `<div class="field"><span>${label}</span><span class="select"><select id="${id}" aria-label="${description}"><button><selectedcontent></selectedcontent></button>${options
     .map(([value, name]) => `<option value="${value}">${name}</option>`)
-    .join("")}</select></div>`;
+    .join("")}</select>${icon("chevron")}</span></div>`;
 const check = (key, label, hint) =>
-  `<label class="field wide" title="${hint}"><span>${label}</span><input id="${key}-toggle" type="checkbox"></label>`;
+  `<label class="field wide" title="${hint}"><span>${label}</span><input id="${key}-toggle" type="checkbox" role="switch"></label>`;
 const card = (name, title, body) =>
-  `<section class="card ${name}"><h2>${title}${cardToggles.includes(name) ? `<input id="${name}-toggle" type="checkbox" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
+  `<section class="card ${name}"><h2>${title}${cardToggles.includes(name) ? `<input id="${name}-toggle" type="checkbox" role="switch" aria-label="${title}">` : ""}</h2><div class="card-body">${body}</div></section>`;
 const cards = [
   card("arrows", "Arrows", slider("gap") + slider("arrowSize")),
   card(
@@ -79,7 +79,10 @@ const cards = [
       "theme",
       "Colors",
       "Color scheme",
-      theme.schemes.map(({ id, name }) => [id, name]),
+      theme.schemes.map(({ id, name, left, right }) => [
+        id,
+        `<span class="swatch"><i style="background:${left}"></i><i style="background:${right}"></i></span>${name}`,
+      ]),
     ) +
       slider("opacity") +
       `<div class="row" title="The overlay is drawn on your screen as it will appear in practice"><button id="showOverlay"></button><button id="move" title="Drag the overlay into place">Move</button><button id="centerOverlay" title="Put the overlay back on the crosshair">Center</button></div>`,
@@ -246,9 +249,15 @@ function render(s) {
   root.style.setProperty("--right", scheme.right);
   root.style.setProperty("--left", scheme.left);
   // A field being typed in is left alone.
-  for (const id in sliders)
+  for (const id in sliders) {
     for (const input of [$(id), $(`${id}-number`)])
       if (document.activeElement !== input) input.value = config[id];
+    const [, min, max] = sliders[id];
+    $(id).style.setProperty(
+      "--at",
+      `${((config[id] - min) / (max - min)) * 100}%`,
+    );
+  }
   if (document.activeElement !== $("voiceLeadMs"))
     $("voiceLeadMs").value = config.voiceLeadMs;
   for (const id of selects) $(id).value = config[id];

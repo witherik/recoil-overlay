@@ -40,7 +40,8 @@ body {
   color: var(--right);
 }
 
-/* Controls. Checkboxes and sliders are the browser's own, in the accent. */
+/* Controls. As in IBM's Carbon, what holds things is square and what moves is
+   round: a switch has a round knob and a slider a round handle. */
 button,
 select,
 input {
@@ -71,6 +72,23 @@ input:not([type="number"]) {
   outline: 2px solid var(--right);
   outline-offset: 1px;
 }
+/* A button does something and stands out from its card. A field holds a
+   value and is sunk into it: darker, with a line under it that brightens
+   under the pointer. Its focus ring is inside. */
+select,
+input[type="number"],
+.key {
+  background: var(--bg);
+  box-shadow: inset 0 -1px var(--raised);
+}
+:is(select, input[type="number"], .key:not(.waiting)):hover {
+  background: var(--bg);
+  box-shadow: inset 0 -1px var(--line);
+}
+:is(select, input[type="number"]):focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
+}
 :disabled {
   opacity: 0.4;
   cursor: default;
@@ -83,6 +101,121 @@ button.primary:hover {
 }
 :is(.primary, .confirm):hover {
   filter: brightness(1.1);
+}
+/* A switch: a pill that fills with the accent when on. */
+input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  width: 32px;
+  height: 16px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--raised);
+  transition: background 70ms;
+}
+input[type="checkbox"]::before {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition: transform 70ms;
+}
+input[type="checkbox"]:checked {
+  background: var(--right);
+}
+input[type="checkbox"]:checked::before {
+  background: var(--bg);
+  transform: translateX(16px);
+}
+/* A slider: main.js sets --at, how far along its range the value is. The
+   handle covers the end of the filled part at every position. It is grey:
+   the accent is kept for what is switched on and for the main action. */
+input[type="range"] {
+  appearance: none;
+  height: 28px;
+  background: none;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    var(--dim) var(--at),
+    var(--raised) var(--at)
+  );
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--text);
+}
+/* A list: drawn here, not by the system, so that an option can hold coloured
+   marks. The chevron glyph is its arrow, and the chosen option has the bar at
+   its side. */
+.select {
+  position: relative;
+  display: flex;
+}
+select,
+::picker(select) {
+  appearance: base-select;
+}
+.select select {
+  width: 100%;
+  padding-right: 32px;
+  align-items: center;
+}
+select::picker-icon,
+option::checkmark {
+  display: none;
+}
+/* The button inside a list only shows the chosen option. */
+select button {
+  display: contents;
+}
+/* Opens downwards unless there is no room. */
+::picker(select) {
+  position-try-order: normal;
+  margin: 2px 0;
+  padding: 0;
+  border: 1px solid var(--raised);
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+option {
+  min-height: 28px;
+  gap: 0;
+  padding: 0 10px;
+  outline: 0;
+  cursor: pointer;
+}
+option:is(:hover, :focus-visible) {
+  background: var(--fill);
+}
+option:checked {
+  box-shadow: inset 2px 0 var(--right);
+}
+/* The two colours of a scheme, before its name: a square cut in half. */
+.swatch {
+  display: inline-flex;
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+.swatch i {
+  width: 6px;
+  height: 12px;
+}
+.select .glyph {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  color: var(--dim);
+  pointer-events: none;
 }
 .active,
 [aria-selected="true"] {
@@ -173,6 +306,8 @@ footer {
 .reset {
   height: 20px;
   margin-left: auto;
+  background: none;
+  color: var(--dim);
 }
 #error {
   position: fixed;
@@ -246,6 +381,15 @@ footer {
 .modes .active {
   box-shadow: inset 2px 0 var(--right);
 }
+/* The mode not chosen is darker, not faded: faded means switched off. */
+.modes button:not(.active) {
+  background: var(--panel);
+  color: var(--dim);
+}
+.modes button:not(.active):hover {
+  background: var(--fill);
+  color: var(--text);
+}
 .weapon-menu {
   position: absolute;
   z-index: 3;
@@ -301,7 +445,7 @@ footer {
   font-size: 13px;
   font-weight: 600;
 }
-/* Switched off: everything fades except the checkbox that turns it back on. */
+/* Switched off: everything fades except the switch that turns it back on. */
 .card.off .card-body {
   opacity: 0.4;
 }
@@ -323,7 +467,7 @@ footer {
 /* A row whose label fills the width, with its control at the right edge. */
 .field.wide > span:first-child,
 .field small,
-.field select,
+.field .select,
 .slider input[type="range"] {
   flex: 1;
   min-width: 0;
