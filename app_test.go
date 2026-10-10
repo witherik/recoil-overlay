@@ -30,17 +30,17 @@ func testApp() (*App, *[]string) {
 func TestHoldReleaseCancelsFutureCues(t *testing.T) {
 	a, spoken := testApp()
 	at := time.Now()
-	a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at, Apex: true})
 	a.advanceLocked(at.Add(649*time.Millisecond), true)
 	if !reflect.DeepEqual(*spoken, []string{"right"}) {
 		t.Fatal(*spoken)
 	}
-	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(650 * time.Millisecond)})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, At: at.Add(650 * time.Millisecond)})
 	a.advanceLocked(at.Add(1400*time.Millisecond), true)
 	if a.running || a.held || a.elapsed != 0 || len(*spoken) != 1 {
 		t.Fatalf("release did not cancel: %+v, %v", a.snapshotLocked(), *spoken)
 	}
-	a.handleInputLocked(inputEvent{Kind: "down", At: at.Add(2 * time.Second), Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at.Add(2 * time.Second), Apex: true})
 	if !a.running || a.runID != 2 {
 		t.Fatal("fresh click did not restart")
 	}
@@ -81,7 +81,7 @@ func TestStartGatesAndFreshPress(t *testing.T) {
 	for _, mode := range []string{"editing", "unfocused", "unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			a, _ := testApp()
-			e := inputEvent{Kind: "down", At: time.Now(), Apex: true}
+			e := inputEvent{Kind: "key", Code: leftMouse, Down: true, At: time.Now(), Apex: true}
 			switch mode {
 			case "editing":
 				a.editing = true
@@ -97,13 +97,13 @@ func TestStartGatesAndFreshPress(t *testing.T) {
 		})
 	}
 	a, _ := testApp()
-	e := inputEvent{Kind: "down", At: time.Now(), Apex: true}
+	e := inputEvent{Kind: "key", Code: leftMouse, Down: true, At: time.Now(), Apex: true}
 	a.handleInputLocked(e)
 	a.handleInputLocked(e)
 	if a.runID != 1 {
 		t.Fatal("repeat down restarted spray")
 	}
-	a.handleInputLocked(inputEvent{Kind: "up"})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse})
 	a.handleInputLocked(e)
 	if !a.running {
 		t.Fatal("fresh press should start")
@@ -132,7 +132,7 @@ func TestStrafeTrackAndReview(t *testing.T) {
 	}
 	left, right := a.settings.LeftKey, a.settings.RightKey
 	key(right, true, -200) // already strafing when the spray starts
-	a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at, Apex: true})
 	key(right, true, 30) // auto-repeat changes nothing
 	key(left, true, 780) // both held: neutral
 	key(right, false, 820)
@@ -142,7 +142,7 @@ func TestStrafeTrackAndReview(t *testing.T) {
 	}
 	key(left, false, 1340)
 	key(right, true, 1360)
-	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(1900 * time.Millisecond)})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, At: at.Add(1900 * time.Millisecond)})
 
 	s := a.snapshotLocked()
 	seg := func(from, to int64, direction string) pattern.Segment {
@@ -156,12 +156,12 @@ func TestStrafeTrackAndReview(t *testing.T) {
 		t.Fatalf("score: %+v", s.Score)
 	}
 	// A tap does not wipe the review; a real spray replaces it.
-	a.handleInputLocked(inputEvent{Kind: "down", At: at.Add(3 * time.Second), Apex: true})
-	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(3100 * time.Millisecond)})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at.Add(3 * time.Second), Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, At: at.Add(3100 * time.Millisecond)})
 	if got := a.snapshotLocked(); got.PlayerEndMS != 1900 {
 		t.Fatalf("tap replaced the review: %+v", got)
 	}
-	a.handleInputLocked(inputEvent{Kind: "down", At: at.Add(4 * time.Second), Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at.Add(4 * time.Second), Apex: true})
 	a.advanceLocked(at.Add(7*time.Second), true)
 	if got := a.snapshotLocked(); got.PlayerEndMS != 2210 || got.Score == nil || got.Score.Missed != 2 || got.Running || got.Player[0].EndMS != 2210 {
 		t.Fatalf("completed spray: %+v %+v", got, got.Score)
@@ -172,7 +172,7 @@ func TestWeaponPatternsDriveCuesAndScore(t *testing.T) {
 	a, spoken := testApp()
 	a.settings.WeaponID, a.settings.ModeID = "havoc", "normal"
 	at := time.Now()
-	a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at, Apex: true})
 	if s := a.snapshotLocked(); s.Weapon != "HAVOC" || s.Mode != "NORMAL" || s.TotalMS != 2850 || s.Direction != "" || len(*spoken) != 0 {
 		t.Fatalf("the charge-up is neutral and silent: %+v %v", s, *spoken)
 	}
@@ -185,7 +185,7 @@ func TestWeaponPatternsDriveCuesAndScore(t *testing.T) {
 		t.Fatal(*spoken)
 	}
 	a.handleInputLocked(inputEvent{Kind: "key", Code: a.settings.RightKey, Down: true, At: at.Add(380 * time.Millisecond)})
-	a.handleInputLocked(inputEvent{Kind: "up", At: at.Add(600 * time.Millisecond)})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, At: at.Add(600 * time.Millisecond)})
 	s := a.snapshotLocked()
 	if s.Score == nil || len(s.Score.Switches) != 1 || s.Score.Switches[0].AtMS != 350 || s.Score.Switches[0].DeviationMS != 30 {
 		t.Fatalf("score: %+v", s.Score)
@@ -220,7 +220,7 @@ func TestOpeningStrafeIsSilentByDefault(t *testing.T) {
 		a.settings.VoiceStart = false
 		a.settings.WeaponID, a.settings.ModeID = test.weapon, test.mode
 		at := time.Now()
-		a.handleInputLocked(inputEvent{Kind: "down", At: at, Apex: true})
+		a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at, Apex: true})
 		for ms := 10; ms <= test.atMS; ms += 10 {
 			a.advanceLocked(at.Add(time.Duration(ms)*time.Millisecond), true)
 		}
@@ -252,19 +252,48 @@ func TestBindKey(t *testing.T) {
 	if a.settings.RightKey != 0xE04B || a.settings.LeftKey != right {
 		t.Fatalf("swap: %+v", a.settings)
 	}
-	// A key held by an unrelated action is refused, and the binding keeps waiting.
-	bind("start", a.settings.LeftKey)
-	if a.binding != "start" || a.settings.StartKey != 0x42 {
+	// A key held by another action is refused, and the binding keeps waiting.
+	bind("practice", a.settings.LeftKey)
+	press(leftMouse) // only shooting may take the left mouse button
+	if a.binding != "practice" || a.settings.PracticeKey != 0x42 {
 		t.Fatalf("taken keys must be refused: %+v", a.settings)
 	}
-	press(0x41) // F7: start and end may then differ
+	press(0x41) // F7
 	press(0x41) // its auto-repeat must not start practice
-	if a.binding != "" || a.settings.StartKey != 0x41 || a.settings.EndKey != 0x42 || !a.editing || a.err != "" {
-		t.Fatalf("bind start: %+v %q", a.settings, a.err)
+	if a.binding != "" || a.settings.PracticeKey != 0x41 || !a.editing || a.err != "" {
+		t.Fatalf("bind practice: %+v %q", a.settings, a.err)
 	}
-	bind("end", 0x41) // sharing the start key makes it a toggle
-	if a.settings.EndKey != 0x41 || a.settings.StartKey != 0x41 {
-		t.Fatalf("shared key: %+v", a.settings)
+}
+
+func TestShootKeyCanBeAnyKeyOrButton(t *testing.T) {
+	for _, code := range []int{mouseKey + 4, 0x39} { // a side button, Space
+		a, _ := testApp()
+		a.editing = true
+		a.binding = "shoot"
+		a.handleInputLocked(inputEvent{Kind: "key", Code: code, Down: true})
+		a.handleInputLocked(inputEvent{Kind: "key", Code: code})
+		if a.binding != "" || a.settings.ShootKey != code || a.held {
+			t.Fatalf("bind shoot: %+v", a.settings)
+		}
+		a.editing = false
+		at := time.Now()
+		a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: at, Apex: true})
+		if a.running {
+			t.Fatal("the old shoot key still shoots")
+		}
+		press := inputEvent{Kind: "key", Code: code, Down: true, At: at, Apex: true}
+		a.handleInputLocked(press)
+		a.handleInputLocked(press) // auto-repeat
+		if !a.running || a.runID != 1 {
+			t.Fatalf("%#x should start one spray", code)
+		}
+		a.handleInputLocked(inputEvent{Kind: "key", Code: code, At: at.Add(time.Second)})
+		if a.running || a.held {
+			t.Fatal("release should end the spray")
+		}
+	}
+	if keyName(leftMouse) != "Left click" || keyName(mouseKey+5) != "Mouse 5" {
+		t.Fatal(keyName(leftMouse), keyName(mouseKey+5))
 	}
 }
 
@@ -288,7 +317,7 @@ func TestVoiceStyleMovesDefaultLead(t *testing.T) {
 		t.Fatalf("unknown style: %q", s.Settings.VoiceStyle)
 	}
 	a.settings.VoiceStyle, a.settings.VoiceStart, a.editing = "tones", true, false
-	a.handleInputLocked(inputEvent{Kind: "down", At: time.Now(), Apex: true})
+	a.handleInputLocked(inputEvent{Kind: "key", Code: leftMouse, Down: true, At: time.Now(), Apex: true})
 	if !reflect.DeepEqual(*spoken, []string{"tones right"}) {
 		t.Fatal(*spoken)
 	}
@@ -315,7 +344,7 @@ func TestMinimisingHidesOnlyThePreview(t *testing.T) {
 func TestResetDefaultsKeepsTheWindowInPlace(t *testing.T) {
 	a, _ := testApp()
 	a.editing = true
-	a.settings.Gap, a.settings.Theme, a.settings.StartKey, a.settings.OffsetX = 200, "blue", 0x41, 50
+	a.settings.Gap, a.settings.Theme, a.settings.PracticeKey, a.settings.OffsetX = 200, "blue", 0x41, 50
 	a.settings.X, a.settings.Positioned = 300, true
 	want := defaultSettings()
 	want.X, want.Positioned = 300, true

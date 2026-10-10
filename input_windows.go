@@ -15,22 +15,27 @@ import (
 )
 
 // An inputEvent is something the app must react to, sent by the native
-// threads: Kind is "down" or "up" for the left mouse button, "key" for a
-// watched key, "moved" when the overlay has been dragged, and "error" when the
-// listener has died.
+// threads: Kind is "key" for a watched key or mouse button, "moved" when the
+// overlay has been dragged, and "error" when the listener has died.
 type inputEvent struct {
 	Kind   string
 	At     time.Time
-	Apex   bool // "down": Apex was the foreground window
 	Detail string
 	X, Y   int  // "moved": the overlay's new offset
-	Code   int  // "key": keyboard scan code; 0xE000 marks extended keys
+	Code   int  // "key": keyboard scan code, 0xE000 marks extended keys; or mouseKey plus a button
 	Down   bool // "key": pressed rather than released
+	Apex   bool // "key", pressed: Apex was the foreground window
 }
 
-// The listener forwards only the bound keys (two strafe keys, three hotkeys),
-// or the next key pressed while a binding is being captured. Every other
-// keystroke is dropped unread.
+// A mouse button is a key too: its code is mouseKey plus its number, from 1.
+const mouseKey = 0x10000
+const leftMouse = mouseKey + 1
+
+var mouseNames = [...]string{"Left click", "Right click", "Middle click", "Mouse 4", "Mouse 5"}
+
+// The listener forwards only the bound keys (two strafe keys, the practice key
+// and the shoot key), or the next key pressed while a binding is being
+// captured. Every other keystroke and click is dropped unread.
 var watchedKeys [4]atomic.Uint32
 var captureKey atomic.Bool
 
@@ -43,8 +48,12 @@ func watched(code uint32) bool {
 	return false
 }
 
-// keyName returns the label Windows prints on the key with this scan code.
+// keyName returns the label Windows prints on the key with this scan code, or
+// the name of the mouse button.
 func keyName(code int) string {
+	if button := code - mouseKey; button >= 1 && button <= len(mouseNames) {
+		return mouseNames[button-1]
+	}
 	lparam := uintptr(code&0xFF) << 16
 	if code&0xE000 != 0 {
 		lparam |= 1 << 24
@@ -131,7 +140,7 @@ func startNativeInput(events chan<- inputEvent) (*nativeInput, error) {
 }
 
 // readRawInput turns one WM_INPUT message into events: presses and releases
-// of the left mouse button and of the watched keys.
+// of the watched keys and mouse buttons.
 func readRawInput(handle uintptr, events chan<- inputEvent) {
 	at := time.Now()
 	// Fixed aligned buffer covers RAWINPUTHEADER (24 bytes on x64) plus
@@ -144,6 +153,11 @@ func readRawInput(handle uintptr, events chan<- inputEvent) {
 	}
 	bytes := unsafe.Slice((*byte)(unsafe.Pointer(&buffer[0])), int(size))
 	const mouse, keyboard = 0, 1 // RIM_TYPEMOUSE, RIM_TYPEKEYBOARD
+	forward := func(code uint32, down bool) {
+		if watched(code) || (down && captureKey.Load()) {
+			events <- inputEvent{Kind: "key", At: at, Code: int(code), Down: down, Apex: down && apexForeground()}
+		}
+	}
 	switch device := binary.LittleEndian.Uint32(bytes[:4]); {
 	case device == keyboard:
 		code := uint32(binary.LittleEndian.Uint16(bytes[24:26]))
@@ -151,17 +165,17 @@ func readRawInput(handle uintptr, events chan<- inputEvent) {
 		if flags&2 != 0 {
 			code |= 0xE000 // extended key (arrows, right-hand modifiers)
 		}
-		down := flags&1 == 0
-		if watched(code) || (down && captureKey.Load()) {
-			events <- inputEvent{Kind: "key", At: at, Code: int(code), Down: down}
-		}
+		forward(code, flags&1 == 0)
 	case device == mouse && count >= 48:
+		// Each button has a bit for its press and the next one for its release.
 		flags := binary.LittleEndian.Uint16(bytes[28:30])
-		if flags&1 != 0 {
-			events <- inputEvent{Kind: "down", At: at, Apex: apexForeground()}
-		}
-		if flags&2 != 0 {
-			events <- inputEvent{Kind: "up", At: at}
+		for button := range len(mouseNames) {
+			for _, down := range []bool{true, false} {
+				if flags&1 != 0 {
+					forward(uint32(mouseKey+button+1), down)
+				}
+				flags >>= 1
+			}
 		}
 	}
 }

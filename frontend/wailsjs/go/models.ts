@@ -16,8 +16,8 @@ export namespace main {
 	    timelineWidth: number;
 	    leftKey: number;
 	    rightKey: number;
-	    startKey: number;
-	    endKey: number;
+	    practiceKey: number;
+	    shootKey: number;
 	    voice: boolean;
 	    voiceStyle: string;
 	    voiceStart: boolean;
@@ -47,8 +47,8 @@ export namespace main {
 	        this.timelineWidth = source["timelineWidth"];
 	        this.leftKey = source["leftKey"];
 	        this.rightKey = source["rightKey"];
-	        this.startKey = source["startKey"];
-	        this.endKey = source["endKey"];
+	        this.practiceKey = source["practiceKey"];
+	        this.shootKey = source["shootKey"];
 	        this.voice = source["voice"];
 	        this.voiceStyle = source["voiceStyle"];
 	        this.voiceStart = source["voiceStart"];
@@ -83,8 +83,8 @@ export namespace main {
 	    score?: pattern.Score;
 	    leftKey: string;
 	    rightKey: string;
-	    startKey: string;
-	    endKey: string;
+	    practiceKey: string;
+	    shootKey: string;
 	    binding: string;
 	
 	    static createFrom(source: any = {}) {
@@ -117,8 +117,8 @@ export namespace main {
 	        this.score = this.convertValues(source["score"], pattern.Score);
 	        this.leftKey = source["leftKey"];
 	        this.rightKey = source["rightKey"];
-	        this.startKey = source["startKey"];
-	        this.endKey = source["endKey"];
+	        this.practiceKey = source["practiceKey"];
+	        this.shootKey = source["shootKey"];
 	        this.binding = source["binding"];
 	    }
 	

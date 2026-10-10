@@ -32,4 +32,11 @@ func TestSettingsRoundTripAndCorruption(t *testing.T) {
 	if readSettings() != defaultSettings() {
 		t.Fatal("corrupt config should use defaults")
 	}
+	// A file from before the two practice keys became one.
+	if err := os.WriteFile(settingsPath(), []byte(`{"startKey": 65, "endKey": 66}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSettings(); got.PracticeKey != 65 || got.ShootKey != leftMouse {
+		t.Fatalf("old start key should be kept: %+v", got)
+	}
 }

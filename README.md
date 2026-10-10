@@ -12,7 +12,7 @@ The program only reads the mouse and the keyboard. It does not send input to the
 
 ## Use
 
-There's no countdown, the practice starts once you start shooting (holding leftclick).
+There's no countdown, the practice starts once you start shooting (holding the shoot key, left click by default). One key starts and ends practice mode (F8 by default). You can bind each action to a keyboard key or a mouse button.
 
 
 https://github.com/user-attachments/assets/5512f863-05c0-4c45-9105-68176445ffe5

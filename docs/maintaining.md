@@ -34,5 +34,5 @@ GitHub Actions builds `recoil-overlay.exe` and attaches it to a new release.
 - The settings window is a Wails (WebView2) window.
 - Go draws the overlay into a separate layered window. Windows lets mouse clicks go through this window to the game.
 - A separate window is necessary because Windows cannot make the transparent Wails window a layered window.
-- A Raw Input listener reads the left mouse button and the four bound keys. It discards all other keys.
+- A Raw Input listener reads the four bound keys. A bound key can be a keyboard key or a mouse button. The listener discards all other keys and buttons.
 - The voice cues are in the program file. An internet connection is not necessary.

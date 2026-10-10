@@ -44,11 +44,11 @@ type Snapshot struct {
 	Score       *pattern.Score    `json:"score"`
 
 	// The bound keys by name, and the action waiting for a new one.
-	LeftKey  string `json:"leftKey"`
-	RightKey string `json:"rightKey"`
-	StartKey string `json:"startKey"`
-	EndKey   string `json:"endKey"`
-	Binding  string `json:"binding"`
+	LeftKey     string `json:"leftKey"`
+	RightKey    string `json:"rightKey"`
+	PracticeKey string `json:"practiceKey"`
+	ShootKey    string `json:"shootKey"`
+	Binding     string `json:"binding"`
 
 	revision uint64
 }
@@ -86,10 +86,10 @@ type App struct {
 
 	view
 	focused, inputReady bool
-	held                bool         // left mouse button
+	held                bool         // shoot key
 	leftDown, rightDown bool         // strafe keys
 	binding             string       // the action waiting for a key, see keySlotsLocked
-	hotDown             map[int]bool // practice keys still down, see hotkeyLocked
+	hotDown             map[int]bool // the practice key while still down, see hotkeyLocked
 
 	// The spray in progress.
 	running, preview bool
@@ -207,29 +207,13 @@ func (a *App) loop() {
 
 func (a *App) handleInputLocked(e inputEvent) {
 	switch e.Kind {
-	case "down":
-		if !a.held {
-			a.held = true
-			if !a.editing && a.inputReady && e.Apex {
-				a.startLocked(e.At, false)
-			}
-		}
-	case "up":
-		a.held = false
-		if !a.preview {
-			if a.running && !e.At.IsZero() {
-				a.elapsed = a.clockLocked(e.At)
-			}
-			a.cancelLocked()
-		}
 	case "key":
 		if !e.Down {
 			delete(a.hotDown, e.Code)
 		}
-		if a.binding != "" {
-			if e.Down {
-				a.bindLocked(e.Code)
-			}
+		// A binding takes every press; releases still count.
+		if a.binding != "" && e.Down {
+			a.bindLocked(e.Code)
 			return
 		}
 		if e.Code == a.settings.LeftKey {
@@ -237,6 +221,9 @@ func (a *App) handleInputLocked(e inputEvent) {
 		}
 		if e.Code == a.settings.RightKey {
 			a.rightDown = e.Down
+		}
+		if e.Code == a.settings.ShootKey {
+			a.shootLocked(e)
 		}
 		a.hotkeyLocked(e.Code, e.Down)
 		if a.running {
@@ -259,7 +246,28 @@ func (a *App) handleInputLocked(e inputEvent) {
 
 // The spray: its clock, its voice cues and the player's strafes.
 
-// startLocked begins a spray at the moment of the click, or a preview of one.
+// shootLocked follows the shoot key: a fresh press in Apex starts a spray, and
+// the release ends it. Raw Input repeats a held keyboard key.
+func (a *App) shootLocked(e inputEvent) {
+	if e.Down {
+		if !a.held {
+			a.held = true
+			if !a.editing && a.inputReady && e.Apex {
+				a.startLocked(e.At, false)
+			}
+		}
+		return
+	}
+	a.held = false
+	if !a.preview {
+		if a.running && !e.At.IsZero() {
+			a.elapsed = a.clockLocked(e.At)
+		}
+		a.cancelLocked()
+	}
+}
+
+// startLocked begins a spray at the moment of the shot, or a preview of one.
 func (a *App) startLocked(at time.Time, preview bool) {
 	a.cancelLocked()
 	a.runID++
@@ -274,7 +282,7 @@ func (a *App) startLocked(at time.Time, preview bool) {
 	for a.firstCue < len(a.cues)-1 && a.cues[a.firstCue].Direction == "" {
 		a.firstCue++
 	}
-	// The first cue cannot lead: the click is not predictable.
+	// The first cue cannot lead: the shot is not predictable.
 	a.announceLocked(0)
 	a.nextCue = 1
 }
@@ -378,19 +386,16 @@ func (a *App) strafeLocked(ms int64) {
 	}
 }
 
-// The keys: the practice hotkeys, and rebinding.
+// The keys: the practice key, and rebinding.
 
-// hotkeyLocked acts on the practice keys. Raw Input repeats a held key, so
-// each one fires only on a fresh press.
+// hotkeyLocked acts on the practice key. Raw Input repeats a held key, so it
+// fires only on a fresh press.
 func (a *App) hotkeyLocked(code int, down bool) {
-	s := a.settings
-	if !down || a.hotDown[code] || (code != s.StartKey && code != s.EndKey) {
+	if !down || a.hotDown[code] || code != a.settings.PracticeKey {
 		return
 	}
 	a.holdLocked(code)
-	if a.editing && code == s.StartKey || !a.editing && code == s.EndKey {
-		a.toggleLocked()
-	}
+	a.toggleLocked()
 }
 
 // holdLocked marks a key as down, so its auto-repeat is not taken for a press.
@@ -404,7 +409,7 @@ func (a *App) holdLocked(code int) {
 // syncKeysLocked tells the input thread which keys to forward.
 func (a *App) syncKeysLocked() {
 	s := a.settings
-	for i, code := range []int{s.LeftKey, s.RightKey, s.StartKey, s.EndKey} {
+	for i, code := range []int{s.LeftKey, s.RightKey, s.PracticeKey, s.ShootKey} {
 		watchedKeys[i].Store(uint32(code))
 	}
 	captureKey.Store(a.binding != "")
@@ -413,26 +418,30 @@ func (a *App) syncKeysLocked() {
 // keySlotsLocked maps each bindable action to its setting.
 func (a *App) keySlotsLocked() map[string]*int {
 	s := &a.settings
-	return map[string]*int{"left": &s.LeftKey, "right": &s.RightKey, "start": &s.StartKey, "end": &s.EndKey}
+	return map[string]*int{"left": &s.LeftKey, "right": &s.RightKey, "practice": &s.PracticeKey, "shoot": &s.ShootKey}
 }
 
 const escapeKey = 0x01
 
-// bindLocked assigns the pressed key to the action being rebound. Escape
-// cancels. Taking the other strafe key swaps the two, and the start and end
-// keys may be the same; a key held by any other action is refused, and the
+// bindLocked assigns the pressed key or mouse button to the action being
+// rebound. Escape cancels. Taking the other strafe key swaps the two. A key
+// held by any other action is refused, and so is the left mouse button for
+// anything but shooting, which would leave the settings window unusable; the
 // binding keeps waiting.
 func (a *App) bindLocked(code int) {
 	if code != escapeKey {
+		if code == leftMouse && a.binding != "shoot" {
+			return
+		}
 		slots := a.keySlotsLocked()
 		target := slots[a.binding]
-		partner := map[string]string{"left": "right", "right": "left", "start": "end", "end": "start"}[a.binding]
+		partner := map[string]string{"left": "right", "right": "left"}[a.binding]
 		for name, slot := range slots {
 			if *slot == code && name != a.binding && name != partner {
 				return
 			}
 		}
-		if strafe := a.binding == "left" || a.binding == "right"; strafe && *slots[partner] == code {
+		if partner != "" && *slots[partner] == code {
 			*slots[partner] = *target
 		}
 		*target = code
@@ -440,7 +449,7 @@ func (a *App) bindLocked(code int) {
 		a.saveLocked()
 	}
 	a.binding = ""
-	a.leftDown, a.rightDown = false, false
+	a.leftDown, a.rightDown, a.held = false, false, false
 	a.syncKeysLocked()
 }
 
@@ -590,11 +599,11 @@ func (a *App) snapshotLocked() Snapshot {
 		PlayerEndMS: playerEnd,
 		Score:       score,
 
-		LeftKey:  keyName(a.settings.LeftKey),
-		RightKey: keyName(a.settings.RightKey),
-		StartKey: keyName(a.settings.StartKey),
-		EndKey:   keyName(a.settings.EndKey),
-		Binding:  a.binding,
+		LeftKey:     keyName(a.settings.LeftKey),
+		RightKey:    keyName(a.settings.RightKey),
+		PracticeKey: keyName(a.settings.PracticeKey),
+		ShootKey:    keyName(a.settings.ShootKey),
+		Binding:     a.binding,
 
 		revision: a.revision,
 	}
@@ -743,9 +752,9 @@ func (a *App) DismissError() Snapshot {
 	return a.emitLocked()
 }
 
-// BindKey waits for the next key press and binds it to action: a strafe key
-// ("left", "right") or a practice key ("start", "end"). Calling it
-// again for the same action cancels.
+// BindKey waits for the next key or mouse button press and binds it to action:
+// a strafe key ("left", "right"), the practice key ("practice") or the shoot
+// key ("shoot"). Calling it again for the same action cancels.
 func (a *App) BindKey(action string) Snapshot {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -771,7 +780,7 @@ func (a *App) UpdateSettings(s Settings) (Snapshot, error) {
 	old := a.settings
 	s.X, s.Y, s.Positioned = old.X, old.Y, old.Positioned
 	s.OffsetX, s.OffsetY = old.OffsetX, old.OffsetY
-	s.LeftKey, s.RightKey, s.StartKey, s.EndKey = old.LeftKey, old.RightKey, old.StartKey, old.EndKey
+	s.LeftKey, s.RightKey, s.PracticeKey, s.ShootKey = old.LeftKey, old.RightKey, old.PracticeKey, old.ShootKey
 	s = s.normalized()
 	// A lead still at its style's default follows a change of style.
 	if s.VoiceStyle != old.VoiceStyle && s.VoiceLeadMS == voiceLeads[old.VoiceStyle] {

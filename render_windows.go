@@ -94,17 +94,17 @@ func practiceStatus(s Snapshot) string {
 	if s.Moving {
 		return "DRAG TO POSITION"
 	}
-	start, end := strings.ToUpper(s.StartKey), strings.ToUpper(s.EndKey)
+	key := strings.ToUpper(s.PracticeKey)
 	if s.Editing {
-		return "EDIT MODE  /  " + start + " TO PRACTICE"
+		return "EDIT MODE  /  " + key + " TO PRACTICE"
 	}
 	if !s.Focused {
-		return "WAITING FOR APEX  /  " + end + " TO EDIT"
+		return "WAITING FOR APEX  /  " + key + " TO EDIT"
 	}
 	if s.Held && !s.Running {
 		return "RELEASE TO RESET"
 	}
-	return end + " TO EDIT"
+	return key + " TO EDIT"
 }
 
 // Everything a frame depends on. An unchanged frame is not drawn again.

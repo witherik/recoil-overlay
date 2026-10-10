@@ -68,8 +68,8 @@ const mock = {
   score: null,
   leftKey: "A",
   rightKey: "D",
-  startKey: "F8",
-  endKey: "F8",
+  practiceKey: "F8",
+  shootKey: "Left click",
   binding: "",
 };
 const defaults = structuredClone(mock.settings);

@@ -34,8 +34,8 @@ const selects = ["theme", "voiceStyle"];
 const bindings = {
   left: "Strafe left",
   right: "Strafe right",
-  start: "Start practice",
-  end: "End practice",
+  shoot: "Shoot",
+  practice: "Start / end practice",
 };
 
 // The markup. Rows are flex containers, so nothing depends on the whitespace
@@ -69,7 +69,7 @@ const cards = [
       check(
         "timelineIdle",
         "Hide while shooting",
-        "Hide the timeline in practice while left-click is held",
+        "Hide the timeline in practice while the shoot key is held",
       ),
   ),
   card(
@@ -123,7 +123,7 @@ document.querySelector("#app").innerHTML = `
   </section>
   <div class="cards">${cards.join("")}</div>
   <div class="actions"><button id="preview">▷ Preview pattern</button><button id="lock" class="primary">Start practice <kbd id="lock-key"></kbd></button></div>
-  <p class="helper">Hold left-click in Apex <span class="divider">·</span> <kbd id="help-start"></kbd> <span id="help-toggle"></span></p>
+  <p class="helper">Hold <kbd id="help-shoot"></kbd> in Apex <span class="divider">·</span> <kbd id="help-practice"></kbd> edit / practice</p>
   <p id="error" role="alert" title="Click to dismiss" hidden></p>
  </main>
  <footer><span id="status-dot" class="status-dot"></span><span id="status">Connecting…</span><button id="reset" class="reset" title="Put every setting, key and the overlay position back to its default">Reset defaults</button></footer>
@@ -229,18 +229,19 @@ function syncWeapon(config) {
 function statusText(s) {
   if (!native) return "Browser preview · global input unavailable";
   if (!s.inputReady) return "Input unavailable";
-  if (s.binding) return "Press an unused key · Esc cancels";
+  if (s.binding) return "Press an unused key or mouse button · Esc cancels";
   if (s.moving) return "Drag the overlay onto your crosshair";
   if (s.editing) return "Edit mode · adjust your overlay";
   if (!s.focused) return "Waiting for Apex Legends";
   if (s.running) return "Follow the highlighted arrow";
   if (s.held) return "Pattern complete · release to reset";
-  return "Ready · hold left-click";
+  return `Ready · hold ${s.shootKey}`;
 }
 function render(s) {
   // State is only sent when it changes, so a late copy of an older one must
   // not replace what is shown.
   if (s.seq < state?.seq) return;
+  if (state?.binding && !s.binding) bindingEnded = performance.now();
   state = s;
   if (!pending && !saving) localSettings = { ...s.settings };
   const config = localSettings || s.settings;
@@ -278,10 +279,9 @@ function render(s) {
       s.binding === id ? "press a key…" : s[`${id}Key`] || "?";
     $(`bind-${id}`).classList.toggle("waiting", s.binding === id);
   }
-  $("lock-key").textContent = s.startKey;
-  $("help-start").textContent = s.startKey;
-  $("help-toggle").textContent =
-    s.startKey === s.endKey ? "edit / practice" : `practice, ${s.endKey} edit`;
+  $("lock-key").textContent = s.practiceKey;
+  $("help-practice").textContent = s.practiceKey;
+  $("help-shoot").textContent = s.shootKey;
   $("preview").textContent =
     s.running && s.preview ? "■ Stop preview" : "▷ Preview pattern";
   $("showOverlay").textContent = s.shown ? "Hide" : "Show";
@@ -383,6 +383,32 @@ for (const id in bindings)
     e.target.blur(); // so Space or Enter can be bound without re-clicking
     api.BindKey(id).then(render).catch(error);
   };
+// While a key is being bound, a mouse button is a candidate for it and not a
+// click on the window. The state that ends the binding can arrive before the
+// press that ended it, so that press is ignored for a moment longer.
+let bindingEnded = -Infinity,
+  ignoreClick = false;
+document.addEventListener(
+  "mousedown",
+  (e) => {
+    ignoreClick =
+      native && (state?.binding || performance.now() - bindingEnded < 300);
+    if (!ignoreClick) return;
+    e.stopPropagation();
+    e.preventDefault();
+  },
+  true,
+);
+for (const type of ["click", "auxclick", "contextmenu"])
+  document.addEventListener(
+    type,
+    (e) => {
+      if (!ignoreClick) return;
+      e.stopPropagation();
+      e.preventDefault();
+    },
+    true,
+  );
 $("minimise").onclick = minimise;
 // Resetting discards everything, so it asks for a second click first.
 let resetArmed;

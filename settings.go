@@ -17,15 +17,15 @@ type Settings struct {
 	Theme          string `json:"theme"` // colour scheme, see palettes
 	Arrows         bool   `json:"arrows"`
 	Timeline       bool   `json:"timeline"`
-	TimelineIdle   bool   `json:"timelineIdle"` // hide the timeline while left-click is held
+	TimelineIdle   bool   `json:"timelineIdle"` // hide the timeline while the shoot key is held
 	OffsetX        int    `json:"offsetX"`
 	OffsetY        int    `json:"offsetY"`
 	TimelineOffset int    `json:"timelineOffset"`
 	TimelineWidth  int    `json:"timelineWidth"`
-	LeftKey        int    `json:"leftKey"` // keyboard scan codes; 0xE000 marks extended keys
+	LeftKey        int    `json:"leftKey"` // key codes, see inputEvent
 	RightKey       int    `json:"rightKey"`
-	StartKey       int    `json:"startKey"` // enters practice; may equal EndKey, making one toggle
-	EndKey         int    `json:"endKey"`
+	PracticeKey    int    `json:"practiceKey"` // starts and ends practice
+	ShootKey       int    `json:"shootKey"`
 	Voice          bool   `json:"voice"`
 	VoiceStyle     string `json:"voiceStyle"` // "fast", "natural" or "tones"
 	VoiceStart     bool   `json:"voiceStart"` // also announce the first strafe of a spray
@@ -47,7 +47,7 @@ func defaultSettings() Settings {
 		Gap: 100, ArrowSize: 42, Opacity: 90, Theme: "green",
 		Arrows: true, Timeline: true, TimelineOffset: 160, TimelineWidth: 420,
 		LeftKey: 0x1E, RightKey: 0x20, // A and D
-		StartKey: 0x42, EndKey: 0x42, // F8
+		PracticeKey: 0x42, ShootKey: leftMouse, // F8
 		Voice: true, VoiceStyle: "fast", VoiceLeadMS: voiceLeads["fast"],
 	}
 }
@@ -70,11 +70,10 @@ func (s Settings) normalized() Settings {
 	s.TimelineWidth = clamp(s.TimelineWidth, 280, 800)
 	s.OffsetX = clamp(s.OffsetX, -10000, 10000)
 	s.OffsetY = clamp(s.OffsetY, -10000, 10000)
-	if s.LeftKey <= 0 || s.RightKey <= 0 || s.LeftKey == s.RightKey {
-		s.LeftKey, s.RightKey = d.LeftKey, d.RightKey
-	}
-	if s.StartKey <= 0 || s.EndKey <= 0 {
-		s.StartKey, s.EndKey = d.StartKey, d.EndKey
+	// Each action needs a key of its own.
+	keys := map[int]bool{s.LeftKey: true, s.RightKey: true, s.PracticeKey: true, s.ShootKey: true}
+	if len(keys) < 4 || min(s.LeftKey, s.RightKey, s.PracticeKey, s.ShootKey) <= 0 {
+		s.LeftKey, s.RightKey, s.PracticeKey, s.ShootKey = d.LeftKey, d.RightKey, d.PracticeKey, d.ShootKey
 	}
 	if _, known := voiceLeads[s.VoiceStyle]; !known {
 		s.VoiceStyle = d.VoiceStyle
@@ -97,8 +96,16 @@ func readSettings() Settings {
 	s := defaultSettings()
 	b, err := os.ReadFile(settingsPath())
 	if err == nil {
-		if json.Unmarshal(b, &s) != nil {
+		// Older files have a start key and an end key; the start key is kept.
+		old := struct {
+			PracticeKey *int `json:"practiceKey"`
+			StartKey    int  `json:"startKey"`
+		}{}
+		if json.Unmarshal(b, &s) != nil || json.Unmarshal(b, &old) != nil {
 			return defaultSettings()
+		}
+		if old.PracticeKey == nil && old.StartKey > 0 {
+			s.PracticeKey = old.StartKey
 		}
 	}
 	return s.normalized()
