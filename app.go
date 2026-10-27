@@ -80,6 +80,7 @@ type App struct {
 
 	// The input thread, and the loop that handles its events.
 	input  *nativeInput
+	pad    *gamepad // controller listener, nil if XInput is missing
 	events chan inputEvent
 	stop   chan struct{}
 	done   chan struct{}
@@ -136,11 +137,16 @@ func (a *App) ready(ctx context.Context) {
 	overlayMoved = func(x, y int) { a.events <- inputEvent{Kind: "moved", X: x, Y: y} }
 	err := startOverlayWindow()
 	var in *nativeInput
+	var pad *gamepad
 	if err == nil {
 		in, err = startNativeInput(a.events)
 	}
+	if err == nil {
+		pad = startGamepad(a.events)
+	}
 	a.mu.Lock()
 	a.input = in
+	a.pad = pad
 	a.inputReady = err == nil
 	if err != nil {
 		a.err = err.Error()
@@ -162,6 +168,7 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.input != nil {
 		a.input.Close()
 	}
+	a.pad.Close()
 	select {
 	case <-a.done:
 	case <-time.After(time.Second):

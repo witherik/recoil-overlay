@@ -51,6 +51,9 @@ func watched(code uint32) bool {
 // keyName returns the label Windows prints on the key with this scan code, or
 // the name of the mouse button.
 func keyName(code int) string {
+	if name := padName(code); name != "" {
+		return name
+	}
 	if button := code - mouseKey; button >= 1 && button <= len(mouseNames) {
 		return mouseNames[button-1]
 	}
